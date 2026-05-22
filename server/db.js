@@ -9,8 +9,7 @@ const connectionString =
   'postgres://postgres:postgres@localhost:5432/birthday?sslmode=require';
 
 const isProduction = process.env.NODE_ENV === 'production';
-console.log('🔧 DB connection string:', connectionString.replace(/\/\/[^:]+:[^@]+@/, '//*****:*****@'));
-
+export const pool = new Pool({
   connectionString,
   ssl: { rejectUnauthorized: false }
 });
