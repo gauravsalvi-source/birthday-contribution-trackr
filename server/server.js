@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import 'dotenv/config';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -88,7 +89,16 @@ app.delete('/api/expenses/:id', asyncHandler(async (req, res) => {
 app.use(express.static(distPath));
 
 app.get('*', (req, res) => {
-  res.sendFile(path.join(distPath, 'index.html'));
+  const indexPath = path.join(distPath, 'index.html');
+
+  if (!existsSync(indexPath)) {
+    res.status(500).json({
+      error: 'Frontend build not found. Run npm run build before starting the server.',
+    });
+    return;
+  }
+
+  res.sendFile(indexPath);
 });
 
 app.use((error, req, res, next) => {
