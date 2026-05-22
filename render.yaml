@@ -1,11 +1,12 @@
 services:
   - type: web
-    name: birthday-tracker
-    runtime: node
-  installCommand: npm install --include=dev
-    buildCommand: npm run build
+    name: birthday-contribution-api
+    env: node
+    buildCommand: npm install && npm run build
     startCommand: node server/server.js
-postDeployCommand: node server/seedMay2026.js
     envVars:
-      - key: DATABASE_URL
-        value: "${DATABASE_URL}"
+      - key: PORT
+        value: 10000
+    healthCheckPath: /api/health
+    healthCheckTimeout: 30
+    autoDeploy: true

@@ -37,6 +37,7 @@ const blankForm = {
   id: '',
   birthdayMonth: defaultBirthdayMonth,
   birthdayFor: defaultBirthdayFor,
+  birthdayDay: 1,
   name: '',
   status: 'Paid',
   contribution: '100',
