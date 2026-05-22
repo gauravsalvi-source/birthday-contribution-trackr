@@ -1,18 +1,17 @@
 // server/db.js (PostgreSQL version)
-import { Pool } from 'pg';
+import pkg from 'pg';
 import { v4 as uuidv4 } from 'uuid';
 
-// Render provides DATABASE_URL; fallback for local dev
-// Render provides DATABASE_URL; fallback for local dev (ensure SSL mode)
-const connectionString =
-  process.env.DATABASE_URL ||
-  'postgres://postgres:postgres@localhost:5432/birthday?sslmode=require';
+const { Pool } = pkg;
 
-const isProduction = process.env.NODE_ENV === 'production';
-export const pool = new Pool({
-  connectionString,
-  ssl: { rejectUnauthorized: false }
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false,
+  },
 });
+
+export default pool;
 
 // Initialize tables if they don't exist
 export async function initDb() {
