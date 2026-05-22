@@ -3,7 +3,9 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { initDb, getAllRecords, getAllExpenses, addRecord, bulkAddRecords, resetMonth, deleteMonth, addExpense, deleteExpense } from './db.js';
 
-dotenv.config();
+if (process.env.NODE_ENV !== 'production') {
+  dotenv.config();
+}
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -11,7 +13,15 @@ app.use(cors());
 app.use(express.json());
 
 // Initialize DB and tables
-initDb();
+(async () => {
+  try {
+    await initDb();
+    console.log('✅ Database initialized');
+  } catch (e) {
+    console.error('❌ Failed to init DB:', e.message);
+    process.exit(1);
+  }
+})();
 
 // Health check
 app.get('/api/health', (req, res) => {

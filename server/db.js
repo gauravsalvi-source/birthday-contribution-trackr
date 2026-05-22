@@ -3,11 +3,16 @@ import { Pool } from 'pg';
 import { v4 as uuidv4 } from 'uuid';
 
 // Render provides DATABASE_URL; fallback for local dev
-const connectionString = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/birthday';
+// Render provides DATABASE_URL; fallback for local dev (ensure SSL mode)
+const connectionString =
+  process.env.DATABASE_URL ||
+  'postgres://postgres:postgres@localhost:5432/birthday?sslmode=require';
 
-export const pool = new Pool({
+const isProduction = process.env.NODE_ENV === 'production';
+console.log('🔧 DB connection string:', connectionString.replace(/\/\/[^:]+:[^@]+@/, '//*****:*****@'));
+
   connectionString,
-  // optional pool config (max connections, idle timeout, etc.)
+  ssl: { rejectUnauthorized: false }
 });
 
 // Initialize tables if they don't exist
