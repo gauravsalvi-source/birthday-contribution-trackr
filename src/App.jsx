@@ -528,7 +528,10 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(record),
       });
-      if (!response.ok) throw new Error('Failed to save record on server');
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(errorBody.error || 'Failed to save record on server');
+      }
       const savedRecord = await response.json();
 
       const existingIndex = records.findIndex((item) => item.id === savedRecord.id);
@@ -557,7 +560,8 @@ export default function App() {
         birthdayMonth: record.birthdayMonth,
         birthdayFor: record.birthdayFor,
       });
-      alert('Note: Saved locally. Failed to sync with server.');
+      setError(`Saved locally only. Backend sync failed: ${err.message}`);
+      alert(`Note: Saved locally only. Backend sync failed: ${err.message}`);
     }
   }
 
@@ -584,7 +588,10 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(expense),
       });
-      if (!response.ok) throw new Error('Failed to save expense on server');
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(errorBody.error || 'Failed to save expense on server');
+      }
       const savedExpense = await response.json();
 
       const existingIndex = expenses.findIndex((item) => item.id === savedExpense.id);
@@ -613,7 +620,8 @@ export default function App() {
         birthdayMonth: expense.birthdayMonth,
         birthdayFor: expense.birthdayFor,
       });
-      alert('Note: Saved expense locally. Failed to sync with server.');
+      setError(`Saved expense locally only. Backend sync failed: ${err.message}`);
+      alert(`Note: Saved expense locally only. Backend sync failed: ${err.message}`);
     }
   }
 

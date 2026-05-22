@@ -47,12 +47,34 @@ export async function query(text, params) {
 
 // CRUD helpers – identical signatures to previous SQLite version
 export async function getAllRecords() {
-  const res = await query('SELECT * FROM records', []);
+  const res = await query(
+    `SELECT
+      id,
+      birthdaymonth AS "birthdayMonth",
+      birthdayfor AS "birthdayFor",
+      name,
+      status,
+      contribution,
+      birthdate AS "birthDate",
+      statusremark AS "statusRemark",
+      note
+    FROM records`,
+    []
+  );
   return res.rows;
 }
 
 export async function getAllExpenses() {
-  const res = await query('SELECT * FROM expenses', []);
+  const res = await query(
+    `SELECT
+      id,
+      birthdaymonth AS "birthdayMonth",
+      birthdayfor AS "birthdayFor",
+      item,
+      amount
+    FROM expenses`,
+    []
+  );
   return res.rows;
 }
 
@@ -70,7 +92,16 @@ export async function addRecord(record) {
   } = record;
   await query(
     `INSERT INTO records (id, birthdayMonth, birthdayFor, name, status, contribution, birthDate, statusRemark, note)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+     ON CONFLICT (id) DO UPDATE SET
+       birthdayMonth = EXCLUDED.birthdayMonth,
+       birthdayFor = EXCLUDED.birthdayFor,
+       name = EXCLUDED.name,
+       status = EXCLUDED.status,
+       contribution = EXCLUDED.contribution,
+       birthDate = EXCLUDED.birthDate,
+       statusRemark = EXCLUDED.statusRemark,
+       note = EXCLUDED.note`,
     [id, birthdayMonth, birthdayFor, name, status, contribution, birthDate, statusRemark, note]
   );
   return { id, birthdayMonth, birthdayFor, name, status, contribution, birthDate, statusRemark, note };
@@ -81,7 +112,16 @@ export async function bulkAddRecords(records) {
   try {
     await client.query('BEGIN');
     const queryText = `INSERT INTO records (id,birthdayMonth,birthdayFor,name,status,contribution,birthDate,statusRemark,note) VALUES ` +
-      records.map((_, i) => `($${i*9+1},$${i*9+2},$${i*9+3},$${i*9+4},$${i*9+5},$${i*9+6},$${i*9+7},$${i*9+8},$${i*9+9})`).join(',');
+      records.map((_, i) => `($${i*9+1},$${i*9+2},$${i*9+3},$${i*9+4},$${i*9+5},$${i*9+6},$${i*9+7},$${i*9+8},$${i*9+9})`).join(',') +
+      ` ON CONFLICT (id) DO UPDATE SET
+        birthdayMonth = EXCLUDED.birthdayMonth,
+        birthdayFor = EXCLUDED.birthdayFor,
+        name = EXCLUDED.name,
+        status = EXCLUDED.status,
+        contribution = EXCLUDED.contribution,
+        birthDate = EXCLUDED.birthDate,
+        statusRemark = EXCLUDED.statusRemark,
+        note = EXCLUDED.note`;
     const values = [];
     for (const r of records) {
       const {
@@ -120,7 +160,13 @@ export async function deleteMonth(month) {
 export async function addExpense(expense) {
   const { id = uuidv4(), birthdayMonth, birthdayFor, item, amount } = expense;
   await query(
-    `INSERT INTO expenses (id, birthdayMonth, birthdayFor, item, amount) VALUES ($1,$2,$3,$4,$5)`,
+    `INSERT INTO expenses (id, birthdayMonth, birthdayFor, item, amount)
+     VALUES ($1,$2,$3,$4,$5)
+     ON CONFLICT (id) DO UPDATE SET
+       birthdayMonth = EXCLUDED.birthdayMonth,
+       birthdayFor = EXCLUDED.birthdayFor,
+       item = EXCLUDED.item,
+       amount = EXCLUDED.amount`,
     [id, birthdayMonth, birthdayFor, item, amount]
   );
   return { id, birthdayMonth, birthdayFor, item, amount };
