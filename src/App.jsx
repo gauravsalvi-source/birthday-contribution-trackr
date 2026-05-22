@@ -4,6 +4,25 @@ const STORAGE_KEY = 'birthday-contribution-records-react-v5';
 const EXPENSE_STORAGE_KEY = 'birthday-contribution-expenses-react-v3';
 const defaultBirthdayMonth = '2026-05';
 const defaultBirthdayFor = 'Sumit, Lalit & Bhakti';
+const defaultEventType = 'birthday';
+const eventTypeLabels = {
+  birthday: {
+    name: 'Birthday',
+    sheetLabel: 'Birthday For',
+    recipientPlaceholder: 'Employee birthday name',
+    exemptedLabel: 'Birthday Employees',
+    bannerLabel: 'Birthday Wish Banner',
+    exemptedNote: 'Birthday Employee',
+  },
+  babyGift: {
+    name: 'Baby Gift',
+    sheetLabel: 'Gift For',
+    recipientPlaceholder: 'Employee or baby gift name',
+    exemptedLabel: 'Gift Recipients',
+    bannerLabel: 'Baby Gift Banner',
+    exemptedNote: 'Gift Recipient',
+  },
+};
 const contributionStatuses = ['Paid', 'Pending', 'Exempted', 'NA'];
 const managerPassword = 'manager123';
 
@@ -37,6 +56,7 @@ const blankForm = {
   id: '',
   birthdayMonth: defaultBirthdayMonth,
   birthdayFor: defaultBirthdayFor,
+  eventType: defaultEventType,
   birthdayDay: 1,
   name: '',
   status: 'Paid',
@@ -53,6 +73,7 @@ const blankExpenseForm = {
   id: '',
   birthdayMonth: defaultBirthdayMonth,
   birthdayFor: defaultBirthdayFor,
+  eventType: defaultEventType,
   item: '',
   amount: '',
 };
@@ -60,14 +81,15 @@ const blankExpenseForm = {
 const blankMonthForm = {
   birthdayMonth: defaultBirthdayMonth,
   birthdayFor: '',
+  eventType: defaultEventType,
 };
 
 const viewTabs = [
   { id: 'records', label: 'Records' },
   { id: 'pending', label: 'Pending List' },
   { id: 'na', label: 'NA List' },
-  { id: 'exempted', label: 'Birthday Employees' },
-  { id: 'banner', label: 'Birthday Wish Banner' },
+  { id: 'exempted', label: 'Recipients' },
+  { id: 'banner', label: 'Banner' },
 ];
 
 function makeId() {
@@ -82,6 +104,35 @@ function parseAmount(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function normalizeEventType(value) {
+  return Object.prototype.hasOwnProperty.call(eventTypeLabels, value) ? value : defaultEventType;
+}
+
+function getEventMeta(eventType) {
+  return eventTypeLabels[normalizeEventType(eventType)];
+}
+
+function makeSheetKey(month, eventType, recipient) {
+  return [
+    String(month || defaultBirthdayMonth).trim(),
+    normalizeEventType(eventType),
+    String(recipient || defaultBirthdayFor).trim(),
+  ].join('|');
+}
+
+function getSheetKey(item) {
+  return makeSheetKey(item.birthdayMonth, item.eventType, item.birthdayFor);
+}
+
+function parseSheetKey(sheetKey) {
+  const [birthdayMonth = defaultBirthdayMonth, eventType = defaultEventType, birthdayFor = defaultBirthdayFor] = String(sheetKey || '').split('|');
+  return {
+    birthdayMonth,
+    eventType: normalizeEventType(eventType),
+    birthdayFor,
+  };
+}
+
 function normalizeRecord(record) {
   const status = contributionStatuses.includes(record.status) ? record.status : 'Paid';
   const contribution = status === 'NA' || status === 'Exempted' ? 0 : parseAmount(record.contribution);
@@ -90,6 +141,7 @@ function normalizeRecord(record) {
     id: record.id || makeId(),
     birthdayMonth: String(record.birthdayMonth || defaultBirthdayMonth).trim(),
     birthdayFor: String(record.birthdayFor || defaultBirthdayFor).trim(),
+    eventType: normalizeEventType(record.eventType),
     name: String(record.name || '').trim() || 'Unnamed',
     status,
     contribution,
@@ -104,6 +156,7 @@ function normalizeExpense(expense) {
     id: expense.id || makeId(),
     birthdayMonth: String(expense.birthdayMonth || defaultBirthdayMonth).trim(),
     birthdayFor: String(expense.birthdayFor || defaultBirthdayFor).trim(),
+    eventType: normalizeEventType(expense.eventType),
     item: String(expense.item || '').trim() || 'Expense',
     amount: parseAmount(expense.amount),
   };
@@ -113,14 +166,19 @@ function cloneDefaultRecords() {
   return defaultRecords.map(normalizeRecord);
 }
 
-function buildMonthRecords(birthdayMonth, birthdayFor) {
+function buildMonthRecords(birthdayMonth, birthdayFor, eventType = defaultEventType) {
+  const normalizedEventType = normalizeEventType(eventType);
+  const isBirthday = normalizedEventType === 'birthday';
+  const eventMeta = getEventMeta(normalizedEventType);
+
   return teamMemberNames.map((name) => normalizeRecord({
     birthdayMonth,
     birthdayFor,
+    eventType: normalizedEventType,
     name,
-    status: isBirthdayEmployee(name, birthdayFor) ? 'Exempted' : 'Pending',
-    contribution: isBirthdayEmployee(name, birthdayFor) ? 0 : 100,
-    note: isBirthdayEmployee(name, birthdayFor) ? 'Birthday Employee' : '',
+    status: isBirthday && isBirthdayEmployee(name, birthdayFor) ? 'Exempted' : 'Pending',
+    contribution: isBirthday && isBirthdayEmployee(name, birthdayFor) ? 0 : 100,
+    note: isBirthday && isBirthdayEmployee(name, birthdayFor) ? eventMeta.exemptedNote : '',
   }));
 }
 
@@ -267,7 +325,8 @@ function recordsFromCsv(text) {
 
   const headers = rows[0].map((header) => header.trim().toLowerCase());
   const monthIndex = headers.findIndex((header) => header.includes('month'));
-  const birthdayForIndex = headers.findIndex((header) => header.includes('birthday'));
+  const birthdayForIndex = headers.findIndex((header) => header.includes('birthday') || header === 'for' || header.includes('gift for'));
+  const eventTypeIndex = headers.findIndex((header) => header.includes('occasion') || header.includes('event'));
   const nameIndex = headers.findIndex((header) => header === 'name' || header.includes('member'));
   const statusIndex = headers.findIndex((header) => header.includes('status'));
   const amountIndex = headers.findIndex((header) => header === 'amount' || header.includes('contribution'));
@@ -280,6 +339,7 @@ function recordsFromCsv(text) {
     .map((row) => ({
       birthdayMonth: monthIndex >= 0 && row[monthIndex] ? row[monthIndex] : defaultBirthdayMonth,
       birthdayFor: birthdayForIndex >= 0 && row[birthdayForIndex] ? row[birthdayForIndex] : defaultBirthdayFor,
+      eventType: eventTypeIndex >= 0 && row[eventTypeIndex]?.toLowerCase().includes('baby') ? 'babyGift' : defaultEventType,
       name: row[nameIndex] || '',
       status: statusIndex >= 0 && row[statusIndex] ? row[statusIndex] : 'Paid',
       contribution: parseAmount(row[amountIndex]),
@@ -300,9 +360,10 @@ function csvEscape(value) {
 }
 
 function buildCsv(records) {
-  const header = ['Birthday Month', 'Birthday For', 'Team Member Name', 'Contribution Status', 'Contribution Amount', 'Note'];
+  const header = ['Month', 'Occasion', 'For', 'Team Member Name', 'Contribution Status', 'Contribution Amount', 'Note'];
   const rows = records.map((record) => [
     record.birthdayMonth,
+    getEventMeta(record.eventType).name,
     record.birthdayFor,
     record.name,
     record.status,
@@ -324,7 +385,7 @@ export default function App() {
   const [expenseForm, setExpenseForm] = useState(blankExpenseForm);
   const [monthForm, setMonthForm] = useState(blankMonthForm);
   const [search, setSearch] = useState('');
-  const [activeMonth, setActiveMonth] = useState(defaultBirthdayMonth);
+  const [activeMonth, setActiveMonth] = useState(makeSheetKey(defaultBirthdayMonth, defaultEventType, defaultBirthdayFor));
   const [activeView, setActiveView] = useState('records');
   const [isManagerMode, setIsManagerMode] = useState(false);
   const [managerPasswordInput, setManagerPasswordInput] = useState('');
@@ -347,8 +408,8 @@ export default function App() {
       
       const combinedRecords = data.records || [];
       if (combinedRecords.length > 0) {
-        const months = Array.from(new Set(combinedRecords.map((r) => r.birthdayMonth))).filter(Boolean);
-        const sorted = months.sort((a, b) => b.localeCompare(a));
+        const sheets = Array.from(new Set(combinedRecords.map(getSheetKey))).filter(Boolean);
+        const sorted = sheets.sort((a, b) => b.localeCompare(a));
         if (sorted.length > 0) {
           setActiveMonth(sorted[0]);
         }
@@ -362,8 +423,8 @@ export default function App() {
       setRecords(localRecs);
       setExpenses(localExps);
       if (localRecs && localRecs.length > 0) {
-        const months = Array.from(new Set(localRecs.map((r) => r.birthdayMonth))).filter(Boolean);
-        const sorted = months.sort((a, b) => b.localeCompare(a));
+        const sheets = Array.from(new Set(localRecs.map(getSheetKey))).filter(Boolean);
+        const sorted = sheets.sort((a, b) => b.localeCompare(a));
         if (sorted.length > 0) {
           setActiveMonth(sorted[0]);
         }
@@ -374,23 +435,26 @@ export default function App() {
   }
 
   const monthTabs = useMemo(() => {
-    const months = Array.from(new Set(records.map((record) => record.birthdayMonth))).filter(Boolean);
-    return months.sort((a, b) => b.localeCompare(a));
+    const sheets = Array.from(new Set(records.map(getSheetKey))).filter(Boolean);
+    return sheets.sort((a, b) => b.localeCompare(a));
   }, [records]);
 
+  const activeSheet = useMemo(() => parseSheetKey(activeMonth), [activeMonth]);
+  const activeEventMeta = getEventMeta(activeSheet.eventType);
+
   const monthlyRecords = useMemo(
-    () => records.filter((record) => record.birthdayMonth === activeMonth),
+    () => records.filter((record) => getSheetKey(record) === activeMonth),
     [records, activeMonth],
   );
   const monthlyExpenses = useMemo(
-    () => expenses.filter((expense) => expense.birthdayMonth === activeMonth),
+    () => expenses.filter((expense) => getSheetKey(expense) === activeMonth),
     [expenses, activeMonth],
   );
 
   const monthFinancials = useMemo(() => {
-    const orderedMonths = Array.from(new Set([
-      ...records.map((record) => record.birthdayMonth),
-      ...expenses.map((expense) => expense.birthdayMonth),
+    const orderedSheets = Array.from(new Set([
+      ...records.map(getSheetKey),
+      ...expenses.map(getSheetKey),
     ]))
       .filter(Boolean)
       .sort((a, b) => a.localeCompare(b));
@@ -398,9 +462,9 @@ export default function App() {
     let runningBalance = 0;
     const financials = {};
 
-    orderedMonths.forEach((month) => {
-      const monthRecords = records.filter((record) => record.birthdayMonth === month);
-      const monthExpenses = expenses.filter((expense) => expense.birthdayMonth === month);
+    orderedSheets.forEach((sheetKey) => {
+      const monthRecords = records.filter((record) => getSheetKey(record) === sheetKey);
+      const monthExpenses = expenses.filter((expense) => getSheetKey(expense) === sheetKey);
       const collected = monthRecords
         .filter((record) => record.status === 'Paid')
         .reduce((sum, record) => sum + record.contribution, 0);
@@ -409,7 +473,7 @@ export default function App() {
       const monthlyBalance = collected - spent;
       const closingBalance = openingBalance + monthlyBalance;
 
-      financials[month] = {
+      financials[sheetKey] = {
         openingBalance,
         monthlyBalance,
         closingBalance,
@@ -462,7 +526,7 @@ export default function App() {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [monthlyRecords, search]);
 
-  const activeBirthdayFor = monthlyRecords[0]?.birthdayFor || defaultBirthdayFor;
+  const activeBirthdayFor = monthlyRecords[0]?.birthdayFor || activeSheet.birthdayFor || defaultBirthdayFor;
 
   function commitRecords(nextRecords) {
     setRecords(nextRecords);
@@ -499,7 +563,8 @@ export default function App() {
     const monthRecord = monthlyRecords[0];
     setForm({
       ...blankForm,
-      birthdayMonth: activeMonth,
+      birthdayMonth: activeSheet.birthdayMonth,
+      eventType: activeSheet.eventType,
       birthdayFor: monthRecord?.birthdayFor || defaultBirthdayFor,
     });
   }
@@ -508,7 +573,8 @@ export default function App() {
     const monthRecord = monthlyRecords[0];
     setExpenseForm({
       ...blankExpenseForm,
-      birthdayMonth: activeMonth,
+      birthdayMonth: activeSheet.birthdayMonth,
+      eventType: activeSheet.eventType,
       birthdayFor: monthRecord?.birthdayFor || defaultBirthdayFor,
     });
   }
@@ -540,10 +606,11 @@ export default function App() {
         : [...records, savedRecord];
 
       commitRecords(nextRecords);
-      setActiveMonth(savedRecord.birthdayMonth);
+      setActiveMonth(getSheetKey(savedRecord));
       setForm({
         ...blankForm,
         birthdayMonth: savedRecord.birthdayMonth,
+        eventType: savedRecord.eventType,
         birthdayFor: savedRecord.birthdayFor,
       });
     } catch (err) {
@@ -554,10 +621,11 @@ export default function App() {
         ? records.map((item) => (item.id === record.id ? record : item))
         : [...records, record];
       commitRecords(nextRecords);
-      setActiveMonth(record.birthdayMonth);
+      setActiveMonth(getSheetKey(record));
       setForm({
         ...blankForm,
         birthdayMonth: record.birthdayMonth,
+        eventType: record.eventType,
         birthdayFor: record.birthdayFor,
       });
       setError(`Saved locally only. Backend sync failed: ${err.message}`);
@@ -570,6 +638,7 @@ export default function App() {
       id: record.id,
       birthdayMonth: record.birthdayMonth,
       birthdayFor: record.birthdayFor,
+      eventType: record.eventType,
       name: record.name,
       status: record.status,
       contribution: String(record.contribution),
@@ -600,10 +669,11 @@ export default function App() {
         : [...expenses, savedExpense];
 
       commitExpenses(nextExpenses);
-      setActiveMonth(savedExpense.birthdayMonth);
+      setActiveMonth(getSheetKey(savedExpense));
       setExpenseForm({
         ...blankExpenseForm,
         birthdayMonth: savedExpense.birthdayMonth,
+        eventType: savedExpense.eventType,
         birthdayFor: savedExpense.birthdayFor,
       });
     } catch (err) {
@@ -614,10 +684,11 @@ export default function App() {
         ? expenses.map((item) => (item.id === expense.id ? expense : item))
         : [...expenses, expense];
       commitExpenses(nextExpenses);
-      setActiveMonth(expense.birthdayMonth);
+      setActiveMonth(getSheetKey(expense));
       setExpenseForm({
         ...blankExpenseForm,
         birthdayMonth: expense.birthdayMonth,
+        eventType: expense.eventType,
         birthdayFor: expense.birthdayFor,
       });
       setError(`Saved expense locally only. Backend sync failed: ${err.message}`);
@@ -630,6 +701,7 @@ export default function App() {
       id: expense.id,
       birthdayMonth: expense.birthdayMonth,
       birthdayFor: expense.birthdayFor,
+      eventType: expense.eventType,
       item: expense.item,
       amount: String(expense.amount),
     });
@@ -664,12 +736,12 @@ export default function App() {
   }
 
   async function resetData() {
-    if (!confirm(`Reset ${formatMonthLabel(activeMonth)} contribution and expense amounts to 0?`)) {
+    if (!confirm(`Reset ${formatMonthLabel(activeSheet.birthdayMonth)} ${activeEventMeta.name} contribution and expense amounts to 0?`)) {
       return;
     }
 
     try {
-      const response = await fetch(`/api/records/reset/${activeMonth}`, {
+      const response = await fetch(`/api/records/reset/${encodeURIComponent(activeMonth)}`, {
         method: 'POST',
       });
       if (!response.ok) throw new Error('Failed to reset month data on server');
@@ -685,7 +757,7 @@ export default function App() {
         const replacement = zeroedMonthRecords.find((item) => item.id === record.id);
         return replacement || record;
       });
-      const nextExpenses = expenses.filter((expense) => expense.birthdayMonth !== activeMonth);
+      const nextExpenses = expenses.filter((expense) => getSheetKey(expense) !== activeMonth);
 
       commitRecords(nextRecords);
       commitExpenses(nextExpenses);
@@ -708,7 +780,7 @@ export default function App() {
         return replacement || record;
       });
       commitRecords(nextRecords);
-      commitExpenses(expenses.filter((expense) => expense.birthdayMonth !== activeMonth));
+      commitExpenses(expenses.filter((expense) => getSheetKey(expense) !== activeMonth));
       resetForm();
       resetExpenseForm();
       setSearch('');
@@ -717,19 +789,20 @@ export default function App() {
   }
 
   async function deleteActiveMonth() {
-    if (!confirm(`Delete ${formatMonthLabel(activeMonth)} and all its records and expenses?`)) {
+    if (!confirm(`Delete ${formatMonthLabel(activeSheet.birthdayMonth)} ${activeEventMeta.name} sheet and all its records and expenses?`)) {
       return;
     }
 
     try {
-      const response = await fetch(`/api/records/month/${activeMonth}`, {
+      const response = await fetch(`/api/records/month/${encodeURIComponent(activeMonth)}`, {
         method: 'DELETE',
       });
       if (!response.ok) throw new Error('Failed to delete month from server');
 
-      const nextRecords = records.filter((record) => record.birthdayMonth !== activeMonth);
-      const nextExpenses = expenses.filter((expense) => expense.birthdayMonth !== activeMonth);
-      const nextActiveMonth = nextRecords[0]?.birthdayMonth || defaultBirthdayMonth;
+      const nextRecords = records.filter((record) => getSheetKey(record) !== activeMonth);
+      const nextExpenses = expenses.filter((expense) => getSheetKey(expense) !== activeMonth);
+      const nextActiveMonth = nextRecords[0] ? getSheetKey(nextRecords[0]) : makeSheetKey(defaultBirthdayMonth, defaultEventType, defaultBirthdayFor);
+      const nextSheet = parseSheetKey(nextActiveMonth);
 
       commitRecords(nextRecords);
       commitExpenses(nextExpenses);
@@ -738,20 +811,23 @@ export default function App() {
       setSearch('');
       setForm({
         ...blankForm,
-        birthdayMonth: nextActiveMonth,
-        birthdayFor: nextRecords.find((record) => record.birthdayMonth === nextActiveMonth)?.birthdayFor || defaultBirthdayFor,
+        birthdayMonth: nextSheet.birthdayMonth,
+        eventType: nextSheet.eventType,
+        birthdayFor: nextSheet.birthdayFor,
       });
       setExpenseForm({
         ...blankExpenseForm,
-        birthdayMonth: nextActiveMonth,
-        birthdayFor: nextRecords.find((record) => record.birthdayMonth === nextActiveMonth)?.birthdayFor || defaultBirthdayFor,
+        birthdayMonth: nextSheet.birthdayMonth,
+        eventType: nextSheet.eventType,
+        birthdayFor: nextSheet.birthdayFor,
       });
     } catch (err) {
       console.error(err);
       // offline fallback
-      const nextRecords = records.filter((record) => record.birthdayMonth !== activeMonth);
-      const nextExpenses = expenses.filter((expense) => expense.birthdayMonth !== activeMonth);
-      const nextActiveMonth = nextRecords[0]?.birthdayMonth || defaultBirthdayMonth;
+      const nextRecords = records.filter((record) => getSheetKey(record) !== activeMonth);
+      const nextExpenses = expenses.filter((expense) => getSheetKey(expense) !== activeMonth);
+      const nextActiveMonth = nextRecords[0] ? getSheetKey(nextRecords[0]) : makeSheetKey(defaultBirthdayMonth, defaultEventType, defaultBirthdayFor);
+      const nextSheet = parseSheetKey(nextActiveMonth);
 
       commitRecords(nextRecords);
       commitExpenses(nextExpenses);
@@ -760,31 +836,36 @@ export default function App() {
       setSearch('');
       setForm({
         ...blankForm,
-        birthdayMonth: nextActiveMonth,
-        birthdayFor: nextRecords.find((record) => record.birthdayMonth === nextActiveMonth)?.birthdayFor || defaultBirthdayFor,
+        birthdayMonth: nextSheet.birthdayMonth,
+        eventType: nextSheet.eventType,
+        birthdayFor: nextSheet.birthdayFor,
       });
       setExpenseForm({
         ...blankExpenseForm,
-        birthdayMonth: nextActiveMonth,
-        birthdayFor: nextRecords.find((record) => record.birthdayMonth === nextActiveMonth)?.birthdayFor || defaultBirthdayFor,
+        birthdayMonth: nextSheet.birthdayMonth,
+        eventType: nextSheet.eventType,
+        birthdayFor: nextSheet.birthdayFor,
       });
       alert('Note: Deleted locally. Failed to sync with server.');
     }
   }
 
   function switchMonth(month) {
+    const sheet = parseSheetKey(month);
     setActiveMonth(month);
     setActiveView('records');
     setSearch('');
     setForm({
       ...blankForm,
-      birthdayMonth: month,
-      birthdayFor: records.find((record) => record.birthdayMonth === month)?.birthdayFor || defaultBirthdayFor,
+      birthdayMonth: sheet.birthdayMonth,
+      eventType: sheet.eventType,
+      birthdayFor: sheet.birthdayFor,
     });
     setExpenseForm({
       ...blankExpenseForm,
-      birthdayMonth: month,
-      birthdayFor: records.find((record) => record.birthdayMonth === month)?.birthdayFor || defaultBirthdayFor,
+      birthdayMonth: sheet.birthdayMonth,
+      eventType: sheet.eventType,
+      birthdayFor: sheet.birthdayFor,
     });
   }
 
@@ -793,20 +874,23 @@ export default function App() {
 
     const birthdayMonth = monthForm.birthdayMonth;
     const birthdayFor = monthForm.birthdayFor.trim();
+    const eventType = normalizeEventType(monthForm.eventType);
+    const newSheetKey = makeSheetKey(birthdayMonth, eventType, birthdayFor);
+    const eventMeta = getEventMeta(eventType);
 
     if (!birthdayMonth || !birthdayFor) {
-      alert('Please select a month and enter Birthday For.');
+      alert(`Please select a month and enter ${eventMeta.sheetLabel}.`);
       return;
     }
 
-    const existingMonthRecords = records.filter((record) => record.birthdayMonth === birthdayMonth);
+    const existingMonthRecords = records.filter((record) => getSheetKey(record) === newSheetKey);
     if (existingMonthRecords.length > 0) {
-      switchMonth(birthdayMonth);
-      alert(`${formatMonthLabel(birthdayMonth)} already exists. Switched to that month.`);
+      switchMonth(newSheetKey);
+      alert(`${formatMonthLabel(birthdayMonth)} ${eventMeta.name} sheet already exists. Switched to that sheet.`);
       return;
     }
 
-    const newMonthRecords = buildMonthRecords(birthdayMonth, birthdayFor);
+    const newMonthRecords = buildMonthRecords(birthdayMonth, birthdayFor, eventType);
 
     try {
       const response = await fetch('/api/records/bulk', {
@@ -820,21 +904,24 @@ export default function App() {
       const nextRecords = [...records, ...savedRecords];
       commitRecords(nextRecords);
 
-      setActiveMonth(birthdayMonth);
+      setActiveMonth(newSheetKey);
       setActiveView('records');
       setSearch('');
       setForm({
         ...blankForm,
         birthdayMonth,
+        eventType,
         birthdayFor,
       });
       setExpenseForm({
         ...blankExpenseForm,
         birthdayMonth,
+        eventType,
         birthdayFor,
       });
       setMonthForm({
         birthdayMonth,
+        eventType,
         birthdayFor: '',
       });
     } catch (err) {
@@ -842,21 +929,24 @@ export default function App() {
       // offline fallback
       const nextRecords = [...records, ...newMonthRecords];
       commitRecords(nextRecords);
-      setActiveMonth(birthdayMonth);
+      setActiveMonth(newSheetKey);
       setActiveView('records');
       setSearch('');
       setForm({
         ...blankForm,
         birthdayMonth,
+        eventType,
         birthdayFor,
       });
       setExpenseForm({
         ...blankExpenseForm,
         birthdayMonth,
+        eventType,
         birthdayFor,
       });
       setMonthForm({
         birthdayMonth,
+        eventType,
         birthdayFor: '',
       });
       alert('Note: Created month sheet locally. Failed to sync with server.');
@@ -913,7 +1003,7 @@ export default function App() {
       const savedRecords = await response.json();
 
       commitRecords(savedRecords);
-      setActiveMonth(savedRecords[0].birthdayMonth);
+      setActiveMonth(getSheetKey(savedRecords[0]));
       setActiveView('records');
       resetForm();
       setSearch('');
@@ -922,7 +1012,7 @@ export default function App() {
       console.error(err);
       // offline fallback
       commitRecords(importedRecords);
-      setActiveMonth(importedRecords[0].birthdayMonth);
+      setActiveMonth(getSheetKey(importedRecords[0]));
       setActiveView('records');
       resetForm();
       setSearch('');
@@ -1043,6 +1133,18 @@ export default function App() {
             <p>All team members will be added automatically for the selected month.</p>
           </div>
           <label>
+            Occasion
+            <select
+              value={monthForm.eventType}
+              onChange={(event) => updateMonthField('eventType', event.target.value)}
+              required
+            >
+              {Object.entries(eventTypeLabels).map(([value, meta]) => (
+                <option key={value} value={value}>{meta.name}</option>
+              ))}
+            </select>
+          </label>
+          <label>
             Month
             <input
               type="month"
@@ -1052,10 +1154,10 @@ export default function App() {
             />
           </label>
           <label>
-            Birthday For
+            {getEventMeta(monthForm.eventType).sheetLabel}
             <input
               type="text"
-              placeholder="Employee birthday name"
+              placeholder={getEventMeta(monthForm.eventType).recipientPlaceholder}
               value={monthForm.birthdayFor}
               onChange={(event) => updateMonthField('birthdayFor', event.target.value)}
               required
@@ -1075,7 +1177,7 @@ export default function App() {
             className={month === activeMonth ? 'tab-button active' : 'tab-button'}
             onClick={() => switchMonth(month)}
           >
-            {formatMonthLabel(month)}
+            {formatMonthLabel(parseSheetKey(month).birthdayMonth)} - {getEventMeta(parseSheetKey(month).eventType).name}
           </button>
         ))}
       </nav>
@@ -1107,7 +1209,7 @@ export default function App() {
             </div>
 
             <label>
-              Birthday Month
+              Month
               <input
                 type="month"
                 value={form.birthdayMonth}
@@ -1117,10 +1219,23 @@ export default function App() {
             </label>
 
             <label>
-              Birthday For
+              Occasion
+              <select
+                value={form.eventType}
+                onChange={(event) => updateField('eventType', event.target.value)}
+                required
+              >
+                {Object.entries(eventTypeLabels).map(([value, meta]) => (
+                  <option key={value} value={value}>{meta.name}</option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              {getEventMeta(form.eventType).sheetLabel}
               <input
                 type="text"
-                placeholder="Teammate birthday name"
+                placeholder={getEventMeta(form.eventType).recipientPlaceholder}
                 value={form.birthdayFor}
                 onChange={(event) => updateField('birthdayFor', event.target.value)}
                 required
@@ -1193,7 +1308,7 @@ export default function App() {
         <section className="records-panel">
           <div className="table-toolbar">
             <div>
-              <h2>{formatMonthLabel(activeMonth)} Contribution View</h2>
+              <h2>{formatMonthLabel(activeSheet.birthdayMonth)} {activeEventMeta.name} Contribution View</h2>
               <p>{visibleRecords.length} of {monthlyRecords.length} records</p>
             </div>
             <div className="toolbar-actions">
@@ -1284,9 +1399,9 @@ export default function App() {
 
           {activeView === 'exempted' ? (
             <ReportPage
-              title="Birthday Employees"
+              title={activeEventMeta.exemptedLabel}
               records={statusReports.exempted}
-              emptyText="No birthday employees marked for this month."
+              emptyText={`No ${activeEventMeta.exemptedLabel.toLowerCase()} marked for this sheet.`}
               showBirthDate={true}
             />
           ) : null}
@@ -1295,6 +1410,7 @@ export default function App() {
             <BirthdayBanner
               birthdayFor={activeBirthdayFor}
               month={activeMonth}
+              eventType={activeSheet.eventType}
               birthdayEmployees={statusReports.exempted}
             />
           ) : null}
@@ -1453,6 +1569,11 @@ function ExpenseSection({ form, expenses, onFieldChange, onSubmit, onCancel, onE
           value={form.birthdayMonth}
           onChange={(event) => onFieldChange('birthdayMonth', event.target.value)}
         />
+        <input
+          type="hidden"
+          value={form.eventType}
+          onChange={(event) => onFieldChange('eventType', event.target.value)}
+        />
         <label>
           Expense Item
           <input
@@ -1579,8 +1700,10 @@ function ReportPage({ title, records, emptyText, showBirthDate = false, canEdit 
   );
 }
 
-function BirthdayBanner({ birthdayFor, month, birthdayEmployees }) {
+function BirthdayBanner({ birthdayFor, month, eventType, birthdayEmployees }) {
   let names = '';
+  const eventMeta = getEventMeta(eventType);
+  const monthValue = parseSheetKey(month).birthdayMonth;
 
   const formatList = (list) => {
     if (list.length === 0) return '';
@@ -1600,12 +1723,14 @@ function BirthdayBanner({ birthdayFor, month, birthdayEmployees }) {
   return (
     <section className="birthday-banner-page">
       <div className="birthday-banner">
-        <div className="banner-ribbon">{formatMonthLabel(month)}</div>
-        <p className="banner-kicker">Team Birthday Celebration</p>
-        <h2>Happy Birthday</h2>
+        <div className="banner-ribbon">{formatMonthLabel(monthValue)}</div>
+        <p className="banner-kicker">Team {eventMeta.name} Contribution</p>
+        <h2>{eventType === 'babyGift' ? 'Congratulations' : 'Happy Birthday'}</h2>
         <strong>{names}</strong>
         <p className="banner-message">
-          Wishing you joy, success, great health, and a wonderful year ahead.
+          {eventType === 'babyGift'
+            ? 'Wishing your family joy, good health, and beautiful new memories ahead.'
+            : 'Wishing you joy, success, great health, and a wonderful year ahead.'}
         </p>
         <div className="banner-footer">From all your teammates</div>
       </div>

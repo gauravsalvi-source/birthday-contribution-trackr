@@ -21,6 +21,7 @@ export async function initDb() {
       id TEXT PRIMARY KEY,
       birthdayMonth TEXT,
       birthdayFor TEXT,
+      eventType TEXT DEFAULT 'birthday',
       name TEXT,
       status TEXT,
       contribution INTEGER,
@@ -32,9 +33,12 @@ export async function initDb() {
       id TEXT PRIMARY KEY,
       birthdayMonth TEXT,
       birthdayFor TEXT,
+      eventType TEXT DEFAULT 'birthday',
       item TEXT,
       amount INTEGER
     );`);
+    await client.query(`ALTER TABLE records ADD COLUMN IF NOT EXISTS eventType TEXT DEFAULT 'birthday';`);
+    await client.query(`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS eventType TEXT DEFAULT 'birthday';`);
   } finally {
     client.release();
   }
@@ -52,6 +56,7 @@ export async function getAllRecords() {
       id,
       birthdaymonth AS "birthdayMonth",
       birthdayfor AS "birthdayFor",
+      COALESCE(eventtype, 'birthday') AS "eventType",
       name,
       status,
       contribution,
@@ -70,6 +75,7 @@ export async function getAllExpenses() {
       id,
       birthdaymonth AS "birthdayMonth",
       birthdayfor AS "birthdayFor",
+      COALESCE(eventtype, 'birthday') AS "eventType",
       item,
       amount
     FROM expenses`,
@@ -83,6 +89,7 @@ export async function addRecord(record) {
     id = uuidv4(),
     birthdayMonth,
     birthdayFor,
+    eventType = 'birthday',
     name,
     status,
     contribution,
@@ -91,31 +98,33 @@ export async function addRecord(record) {
     note = ''
   } = record;
   await query(
-    `INSERT INTO records (id, birthdayMonth, birthdayFor, name, status, contribution, birthDate, statusRemark, note)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+    `INSERT INTO records (id, birthdayMonth, birthdayFor, eventType, name, status, contribution, birthDate, statusRemark, note)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
      ON CONFLICT (id) DO UPDATE SET
        birthdayMonth = EXCLUDED.birthdayMonth,
        birthdayFor = EXCLUDED.birthdayFor,
+       eventType = EXCLUDED.eventType,
        name = EXCLUDED.name,
        status = EXCLUDED.status,
        contribution = EXCLUDED.contribution,
        birthDate = EXCLUDED.birthDate,
        statusRemark = EXCLUDED.statusRemark,
        note = EXCLUDED.note`,
-    [id, birthdayMonth, birthdayFor, name, status, contribution, birthDate, statusRemark, note]
+    [id, birthdayMonth, birthdayFor, eventType, name, status, contribution, birthDate, statusRemark, note]
   );
-  return { id, birthdayMonth, birthdayFor, name, status, contribution, birthDate, statusRemark, note };
+  return { id, birthdayMonth, birthdayFor, eventType, name, status, contribution, birthDate, statusRemark, note };
 }
 
 export async function bulkAddRecords(records) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const queryText = `INSERT INTO records (id,birthdayMonth,birthdayFor,name,status,contribution,birthDate,statusRemark,note) VALUES ` +
-      records.map((_, i) => `($${i*9+1},$${i*9+2},$${i*9+3},$${i*9+4},$${i*9+5},$${i*9+6},$${i*9+7},$${i*9+8},$${i*9+9})`).join(',') +
+    const queryText = `INSERT INTO records (id,birthdayMonth,birthdayFor,eventType,name,status,contribution,birthDate,statusRemark,note) VALUES ` +
+      records.map((_, i) => `($${i*10+1},$${i*10+2},$${i*10+3},$${i*10+4},$${i*10+5},$${i*10+6},$${i*10+7},$${i*10+8},$${i*10+9},$${i*10+10})`).join(',') +
       ` ON CONFLICT (id) DO UPDATE SET
         birthdayMonth = EXCLUDED.birthdayMonth,
         birthdayFor = EXCLUDED.birthdayFor,
+        eventType = EXCLUDED.eventType,
         name = EXCLUDED.name,
         status = EXCLUDED.status,
         contribution = EXCLUDED.contribution,
@@ -128,6 +137,7 @@ export async function bulkAddRecords(records) {
         id = uuidv4(),
         birthdayMonth,
         birthdayFor,
+        eventType = 'birthday',
         name,
         status,
         contribution,
@@ -135,7 +145,7 @@ export async function bulkAddRecords(records) {
         statusRemark = '',
         note = ''
       } = r;
-      values.push(id, birthdayMonth, birthdayFor, name, status, contribution, birthDate, statusRemark, note);
+      values.push(id, birthdayMonth, birthdayFor, eventType, name, status, contribution, birthDate, statusRemark, note);
     }
     await client.query(queryText, values);
     await client.query('COMMIT');
@@ -149,27 +159,43 @@ export async function bulkAddRecords(records) {
 }
 
 export async function resetMonth(month) {
-  await query(`UPDATE records SET status = 'Pending', contribution = 0, statusRemark = '', note = '' WHERE birthdayMonth = $1`, [month]);
+  const [birthdayMonth, eventType, birthdayFor] = month.includes('|') ? month.split('|') : [month, null, null];
+  if (eventType && birthdayFor) {
+    await query(
+      `UPDATE records SET status = 'Pending', contribution = 0, statusRemark = '', note = ''
+       WHERE birthdayMonth = $1 AND eventType = $2 AND birthdayFor = $3`,
+      [birthdayMonth, eventType, birthdayFor]
+    );
+    return;
+  }
+  await query(`UPDATE records SET status = 'Pending', contribution = 0, statusRemark = '', note = '' WHERE birthdayMonth = $1`, [birthdayMonth]);
 }
 
 export async function deleteMonth(month) {
-  await query('DELETE FROM records WHERE birthdayMonth = $1', [month]);
-  await query('DELETE FROM expenses WHERE birthdayMonth = $1', [month]);
+  const [birthdayMonth, eventType, birthdayFor] = month.includes('|') ? month.split('|') : [month, null, null];
+  if (eventType && birthdayFor) {
+    await query('DELETE FROM records WHERE birthdayMonth = $1 AND eventType = $2 AND birthdayFor = $3', [birthdayMonth, eventType, birthdayFor]);
+    await query('DELETE FROM expenses WHERE birthdayMonth = $1 AND eventType = $2 AND birthdayFor = $3', [birthdayMonth, eventType, birthdayFor]);
+    return;
+  }
+  await query('DELETE FROM records WHERE birthdayMonth = $1', [birthdayMonth]);
+  await query('DELETE FROM expenses WHERE birthdayMonth = $1', [birthdayMonth]);
 }
 
 export async function addExpense(expense) {
-  const { id = uuidv4(), birthdayMonth, birthdayFor, item, amount } = expense;
+  const { id = uuidv4(), birthdayMonth, birthdayFor, eventType = 'birthday', item, amount } = expense;
   await query(
-    `INSERT INTO expenses (id, birthdayMonth, birthdayFor, item, amount)
-     VALUES ($1,$2,$3,$4,$5)
+    `INSERT INTO expenses (id, birthdayMonth, birthdayFor, eventType, item, amount)
+     VALUES ($1,$2,$3,$4,$5,$6)
      ON CONFLICT (id) DO UPDATE SET
        birthdayMonth = EXCLUDED.birthdayMonth,
        birthdayFor = EXCLUDED.birthdayFor,
+       eventType = EXCLUDED.eventType,
        item = EXCLUDED.item,
        amount = EXCLUDED.amount`,
-    [id, birthdayMonth, birthdayFor, item, amount]
+    [id, birthdayMonth, birthdayFor, eventType, item, amount]
   );
-  return { id, birthdayMonth, birthdayFor, item, amount };
+  return { id, birthdayMonth, birthdayFor, eventType, item, amount };
 }
 
 export async function deleteExpense(id) {

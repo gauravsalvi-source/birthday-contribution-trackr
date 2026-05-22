@@ -103,8 +103,8 @@ h2 {
 .month-create-panel {
   display: grid;
   align-items: end;
-  gap: 12px;
-  grid-template-columns: minmax(220px, 1fr) 170px minmax(220px, 280px) auto;
+  gap: 14px 18px;
+  grid-template-columns: minmax(240px, 1fr) minmax(140px, 170px) minmax(210px, 230px) minmax(260px, 340px) auto;
   margin-bottom: 16px;
   padding: 16px;
   border: 1px solid #e5ded3;
@@ -132,14 +132,20 @@ h2 {
   font-weight: 750;
 }
 
-.month-create-panel input {
+.month-create-panel input,
+.month-create-panel select {
   width: 100%;
+  min-width: 0;
   min-height: 42px;
   padding: 10px 12px;
   border: 1px solid #cec6bb;
   border-radius: 8px;
   background: #ffffff;
   color: #202124;
+}
+
+.month-create-panel .primary-button {
+  min-width: 150px;
 }
 
 .month-tabs,
@@ -777,6 +783,16 @@ td {
     max-height: none;
     overflow: visible;
     position: static;
+  }
+
+  .month-create-panel {
+    align-items: end;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .month-create-panel > div,
+  .month-create-panel .primary-button {
+    grid-column: 1 / -1;
   }
 }
 
