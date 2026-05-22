@@ -437,9 +437,9 @@ export default function App() {
       pendingAmount,
       spent,
       balance: collected - spent,
-      openingBalance: monthFinancials[activeMonth]?.openingBalance || 0,
-      closingBalance: monthFinancials[activeMonth]?.closingBalance || collected - spent,
-      expectedBalance: (monthFinancials[activeMonth]?.openingBalance || 0) + collected + pendingAmount - spent,
+      openingBalance: monthFinancials[activeMonth]?.openingBalance ?? 0,
+      closingBalance: monthFinancials[activeMonth]?.closingBalance ?? collected - spent,
+      expectedBalance: (monthFinancials[activeMonth]?.openingBalance ?? 0) + collected + pendingAmount - spent,
       activeCount: activeRecords.length,
       paidCount: paidRecords.length,
       pendingCount: pendingRecords.length,
@@ -1081,10 +1081,10 @@ export default function App() {
       </nav>
 
       <section className="summary-grid" aria-label="Contribution totals">
+        <MetricCard label="Opening Balance" value={formatMoney(totals.openingBalance)} />
         <MetricCard label="Total Collected" value={formatMoney(totals.collected)} />
         <MetricCard label="Total Expense" value={formatMoney(totals.spent)} />
         <MetricCard label="Total Balance" value={formatMoney(totals.closingBalance)} />
-        <MetricCard label="Active Members" value={totals.activeCount} />
       </section>
 
       <section className="status-grid" aria-label="Contribution status totals">
