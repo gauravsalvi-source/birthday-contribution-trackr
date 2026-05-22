@@ -1704,6 +1704,9 @@ function BirthdayBanner({ birthdayFor, month, eventType, birthdayEmployees }) {
   let names = '';
   const eventMeta = getEventMeta(eventType);
   const monthValue = parseSheetKey(month).birthdayMonth;
+  const isBabyGift = eventType === 'babyGift';
+  const babyGiftName = birthdayFor.replace(/\s*baby\s*gift\s*$/i, '').trim();
+  const babyGiftRecipient = babyGiftName.replace(/[’']s$/i, '').trim() || names;
 
   const formatList = (list) => {
     if (list.length === 0) return '';
@@ -1724,11 +1727,15 @@ function BirthdayBanner({ birthdayFor, month, eventType, birthdayEmployees }) {
     <section className="birthday-banner-page">
       <div className="birthday-banner">
         <div className="banner-ribbon">{formatMonthLabel(monthValue)}</div>
-        <p className="banner-kicker">Team {eventMeta.name} Contribution</p>
-        <h2>{eventType === 'babyGift' ? 'Congratulations' : 'Happy Birthday'}</h2>
-        <strong>{names}</strong>
+        <p className="banner-kicker">
+          {isBabyGift
+            ? `${formatMonthLabel(monthValue)} - Team Contribution for ${birthdayFor}`
+            : `Team ${eventMeta.name} Contribution`}
+        </p>
+        <h2>{isBabyGift ? `Congratulations, ${babyGiftRecipient}!` : 'Happy Birthday'}</h2>
+        {isBabyGift ? null : <strong>{names}</strong>}
         <p className="banner-message">
-          {eventType === 'babyGift'
+          {isBabyGift
             ? 'Wishing your family joy, good health, and beautiful new memories ahead.'
             : 'Wishing you joy, success, great health, and a wonderful year ahead.'}
         </p>
