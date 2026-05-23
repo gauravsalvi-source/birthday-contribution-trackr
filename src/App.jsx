@@ -1012,6 +1012,8 @@ export default function App() {
         : [...records, savedRecord];
 
       commitRecords(nextRecords);
+      // Refresh data to reflect updated opening balance
+      fetchData();
     } catch (err) {
       console.error(err);
       // fallback to offline save if server is unreachable
