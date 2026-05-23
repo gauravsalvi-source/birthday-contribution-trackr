@@ -843,4 +843,15 @@ td {
     grid-template-columns: 1fr 1fr;
     width: 100%;
   }
+
+  .birthday-banner {
+    padding: 32px 16px 24px;
+    min-height: auto;
+  }
+
+  .banner-ribbon {
+    position: static;
+    margin-bottom: 16px;
+  }
 }
+
