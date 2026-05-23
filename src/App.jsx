@@ -8,6 +8,7 @@ const defaultEventType = 'birthday';
 const eventTypeLabels = {
   birthday: {
     name: 'Birthday',
+    contributionName: 'Birthday Contribution',
     sheetLabel: 'Birthday For',
     recipientPlaceholder: 'Employee birthday name',
     exemptedLabel: 'Birthday Employees',
@@ -16,6 +17,7 @@ const eventTypeLabels = {
   },
   babyGift: {
     name: 'Baby Gift',
+    contributionName: 'Baby Gift Contribution',
     sheetLabel: 'Gift For',
     recipientPlaceholder: 'Employee or baby gift name',
     exemptedLabel: 'Gift Recipients',
@@ -110,6 +112,12 @@ function normalizeEventType(value) {
 
 function getEventMeta(eventType) {
   return eventTypeLabels[normalizeEventType(eventType)];
+}
+
+function formatSheetLabel(sheetKey) {
+  const sheet = parseSheetKey(sheetKey);
+  const eventMeta = getEventMeta(sheet.eventType);
+  return `${formatMonthLabel(sheet.birthdayMonth)} - ${eventMeta.contributionName}`;
 }
 
 function makeSheetKey(month, eventType, recipient) {
@@ -403,12 +411,16 @@ export default function App() {
         throw new Error('Failed to fetch data from the server');
       }
       const data = await response.json();
-      setRecords(data.records || []);
-      setExpenses(data.expenses || []);
+      const backendRecords = (data.records || []).map(normalizeRecord);
+      const backendExpenses = (data.expenses || []).map(normalizeExpense);
+      setRecords(backendRecords);
+      setExpenses(backendExpenses);
       
-      const combinedRecords = data.records || [];
-      if (combinedRecords.length > 0) {
-        const sheets = Array.from(new Set(combinedRecords.map(getSheetKey))).filter(Boolean);
+      if (backendRecords.length > 0 || backendExpenses.length > 0) {
+        const sheets = Array.from(new Set([
+          ...backendRecords.map(getSheetKey),
+          ...backendExpenses.map(getSheetKey),
+        ])).filter(Boolean);
         const sorted = sheets.sort((a, b) => b.localeCompare(a));
         if (sorted.length > 0) {
           setActiveMonth(sorted[0]);
@@ -435,9 +447,12 @@ export default function App() {
   }
 
   const monthTabs = useMemo(() => {
-    const sheets = Array.from(new Set(records.map(getSheetKey))).filter(Boolean);
+    const sheets = Array.from(new Set([
+      ...records.map(getSheetKey),
+      ...expenses.map(getSheetKey),
+    ])).filter(Boolean);
     return sheets.sort((a, b) => b.localeCompare(a));
-  }, [records]);
+  }, [records, expenses]);
 
   const activeSheet = useMemo(() => parseSheetKey(activeMonth), [activeMonth]);
   const activeEventMeta = getEventMeta(activeSheet.eventType);
@@ -736,7 +751,7 @@ export default function App() {
   }
 
   async function resetData() {
-    if (!confirm(`Reset ${formatMonthLabel(activeSheet.birthdayMonth)} ${activeEventMeta.name} contribution and expense amounts to 0?`)) {
+    if (!confirm(`Reset ${formatMonthLabel(activeSheet.birthdayMonth)} ${activeEventMeta.contributionName} and expense amounts to 0?`)) {
       return;
     }
 
@@ -789,7 +804,7 @@ export default function App() {
   }
 
   async function deleteActiveMonth() {
-    if (!confirm(`Delete ${formatMonthLabel(activeSheet.birthdayMonth)} ${activeEventMeta.name} sheet and all its records and expenses?`)) {
+    if (!confirm(`Delete ${formatMonthLabel(activeSheet.birthdayMonth)} ${activeEventMeta.contributionName} sheet and all its records and expenses?`)) {
       return;
     }
 
@@ -886,7 +901,7 @@ export default function App() {
     const existingMonthRecords = records.filter((record) => getSheetKey(record) === newSheetKey);
     if (existingMonthRecords.length > 0) {
       switchMonth(newSheetKey);
-      alert(`${formatMonthLabel(birthdayMonth)} ${eventMeta.name} sheet already exists. Switched to that sheet.`);
+      alert(`${formatMonthLabel(birthdayMonth)} ${eventMeta.contributionName} sheet already exists. Switched to that sheet.`);
       return;
     }
 
@@ -899,10 +914,9 @@ export default function App() {
         body: JSON.stringify(newMonthRecords),
       });
       if (!response.ok) throw new Error('Failed to create month on server');
-      const savedRecords = await response.json();
+      const savedRecords = (await response.json()).map(normalizeRecord);
 
-      const nextRecords = [...records, ...savedRecords];
-      commitRecords(nextRecords);
+      commitRecords(savedRecords);
 
       setActiveMonth(newSheetKey);
       setActiveView('records');
@@ -1177,7 +1191,7 @@ export default function App() {
             className={month === activeMonth ? 'tab-button active' : 'tab-button'}
             onClick={() => switchMonth(month)}
           >
-            {formatMonthLabel(parseSheetKey(month).birthdayMonth)} - {getEventMeta(parseSheetKey(month).eventType).name}
+            {formatSheetLabel(month)}
           </button>
         ))}
       </nav>
@@ -1308,7 +1322,7 @@ export default function App() {
         <section className="records-panel">
           <div className="table-toolbar">
             <div>
-              <h2>{formatMonthLabel(activeSheet.birthdayMonth)} {activeEventMeta.name} Contribution View</h2>
+              <h2>{formatMonthLabel(activeSheet.birthdayMonth)} {activeEventMeta.contributionName} View</h2>
               <p>{visibleRecords.length} of {monthlyRecords.length} records</p>
             </div>
             <div className="toolbar-actions">
