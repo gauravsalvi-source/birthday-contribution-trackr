@@ -117,7 +117,7 @@ function getEventMeta(eventType) {
 function formatSheetLabel(sheetKey) {
   const sheet = parseSheetKey(sheetKey);
   const eventMeta = getEventMeta(sheet.eventType);
-  return `${formatMonthLabel(sheet.birthdayMonth)} - ${eventMeta.contributionName}`;
+  return `${formatMonthLabel(sheet.birthdayMonth)} - ${eventMeta.name}`;
 }
 
 function makeSheetKey(month, eventType, recipient) {
@@ -1322,7 +1322,7 @@ export default function App() {
         <section className="records-panel">
           <div className="table-toolbar">
             <div>
-              <h2>{formatMonthLabel(activeSheet.birthdayMonth)} {activeEventMeta.contributionName} View</h2>
+              <h2>{formatMonthLabel(activeSheet.birthdayMonth)} {activeEventMeta.name} View</h2>
               <p>{visibleRecords.length} of {monthlyRecords.length} records</p>
             </div>
             <div className="toolbar-actions">
