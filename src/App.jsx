@@ -458,7 +458,7 @@ export default function App() {
   const activeEventMeta = getEventMeta(activeSheet.eventType);
 
   const monthlyRecords = useMemo(
-    () => records.filter((record) => getSheetKey(record) === activeMonth),
+    () => records.filter((record) => getSheetKey(record) === activeMonth && record.name !== 'Opening Balance'),
     [records, activeMonth],
   );
   const monthlyExpenses = useMemo(
@@ -480,11 +480,18 @@ export default function App() {
     orderedSheets.forEach((sheetKey) => {
       const monthRecords = records.filter((record) => getSheetKey(record) === sheetKey);
       const monthExpenses = expenses.filter((expense) => getSheetKey(expense) === sheetKey);
-      const collected = monthRecords
+      
+      const openingBalanceAdjustment = monthRecords
+        .filter((record) => record.name === 'Opening Balance')
+        .reduce((sum, record) => sum + record.contribution, 0);
+
+      const regularRecords = monthRecords.filter((record) => record.name !== 'Opening Balance');
+
+      const collected = regularRecords
         .filter((record) => record.status === 'Paid')
         .reduce((sum, record) => sum + record.contribution, 0);
       const spent = monthExpenses.reduce((sum, expense) => sum + expense.amount, 0);
-      const openingBalance = runningBalance;
+      const openingBalance = runningBalance + openingBalanceAdjustment;
       const monthlyBalance = collected - spent;
       const closingBalance = openingBalance + monthlyBalance;
 
@@ -492,6 +499,7 @@ export default function App() {
         openingBalance,
         monthlyBalance,
         closingBalance,
+        openingBalanceAdjustment,
       };
 
       runningBalance = closingBalance;
@@ -967,6 +975,55 @@ export default function App() {
     }
   }
 
+  async function handleSaveOpeningBalance(amount) {
+    const activeSheetKey = activeMonth;
+    const { birthdayMonth, eventType, birthdayFor } = parseSheetKey(activeSheetKey);
+    
+    const existingRecord = records.find(
+      (r) => getSheetKey(r) === activeSheetKey && r.name === 'Opening Balance'
+    );
+    
+    const record = {
+      id: existingRecord ? existingRecord.id : makeId(),
+      birthdayMonth,
+      birthdayFor,
+      eventType,
+      name: 'Opening Balance',
+      status: 'Paid',
+      contribution: amount,
+      note: 'Opening Balance Adjustment'
+    };
+
+    try {
+      const response = await fetch('/api/records', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(record),
+      });
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}));
+        throw new Error(errorBody.error || 'Failed to save opening balance adjustment on server');
+      }
+      const savedRecord = await response.json();
+
+      const existingIndex = records.findIndex((item) => item.id === savedRecord.id);
+      const nextRecords = existingIndex >= 0
+        ? records.map((item) => (item.id === savedRecord.id ? savedRecord : item))
+        : [...records, savedRecord];
+
+      commitRecords(nextRecords);
+    } catch (err) {
+      console.error(err);
+      // fallback to offline save if server is unreachable
+      const existingIndex = records.findIndex((item) => item.id === record.id);
+      const nextRecords = existingIndex >= 0
+        ? records.map((item) => (item.id === record.id ? record : item))
+        : [...records, record];
+      commitRecords(nextRecords);
+      setError(`Saved opening balance adjustment locally only. Backend sync failed: ${err.message}`);
+    }
+  }
+
   function unlockManagerMode(event) {
     event.preventDefault();
     if (managerPasswordInput !== managerPassword) {
@@ -1197,7 +1254,23 @@ export default function App() {
       </nav>
 
       <section className="summary-grid" aria-label="Contribution totals">
-        <MetricCard label="Opening Balance" value={formatMoney(totals.openingBalance)} />
+        <MetricCard 
+          label="Opening Balance" 
+          value={
+            <div>
+              <div>{formatMoney(totals.openingBalance)}</div>
+              {isManagerMode && (
+                <div style={{ fontSize: '0.8rem', color: '#6d675f', marginTop: '6px', fontWeight: 'normal' }}>
+                  Adjustment: 
+                  <OpeningBalanceEditor 
+                    currentAdjustment={monthFinancials[activeMonth]?.openingBalanceAdjustment ?? 0}
+                    onSave={handleSaveOpeningBalance}
+                  />
+                </div>
+              )}
+            </div>
+          } 
+        />
         <MetricCard label="Total Collected" value={formatMoney(totals.collected)} />
         <MetricCard label="Total Expense" value={formatMoney(totals.spent)} />
         <MetricCard label="Total Balance" value={formatMoney(totals.closingBalance)} />
@@ -1440,6 +1513,77 @@ function MetricCard({ label, value, className = '', valueClassName = '' }) {
       <span>{label}</span>
       <strong className={valueClassName}>{value}</strong>
     </article>
+  );
+}
+
+function OpeningBalanceEditor({ currentAdjustment, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(currentAdjustment);
+
+  useEffect(() => {
+    setValue(currentAdjustment);
+  }, [currentAdjustment]);
+
+  if (editing) {
+    return (
+      <form 
+        onSubmit={(e) => {
+          e.preventDefault();
+          onSave(parseFloat(value) || 0);
+          setEditing(false);
+        }}
+        style={{ display: 'inline-flex', gap: '8px', alignItems: 'center', marginTop: '4px' }}
+      >
+        <input
+          type="number"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          style={{
+            width: '80px',
+            height: '24px',
+            fontSize: '0.8rem',
+            padding: '2px 6px',
+            border: '1px solid #cec6bb',
+            borderRadius: '4px',
+            background: '#ffffff',
+            color: '#202124'
+          }}
+          required
+        />
+        <button 
+          type="submit" 
+          className="primary-button" 
+          style={{ minHeight: '24px', padding: '0 6px', fontSize: '0.75rem', fontWeight: 'bold' }}
+        >
+          Save
+        </button>
+        <button 
+          type="button" 
+          className="secondary-button" 
+          onClick={() => {
+            setValue(currentAdjustment);
+            setEditing(false);
+          }}
+          style={{ minHeight: '24px', padding: '0 6px', fontSize: '0.75rem' }}
+        >
+          Cancel
+        </button>
+      </form>
+    );
+  }
+
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginLeft: '4px' }}>
+      <strong>{formatMoney(currentAdjustment)}</strong>
+      <button 
+        type="button" 
+        className="ghost-button" 
+        onClick={() => setEditing(true)}
+        style={{ minHeight: '20px', padding: '0px 4px', fontSize: '0.75rem', textDecoration: 'underline' }}
+      >
+        Edit
+      </button>
+    </span>
   );
 }
 
