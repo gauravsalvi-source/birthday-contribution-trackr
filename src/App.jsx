@@ -26,7 +26,7 @@ const eventTypeLabels = {
   },
 };
 const contributionStatuses = ['Paid', 'Pending', 'Exempted', 'NA'];
-const managerPassword = 'manager123';
+const managerPassword = 'Gaurav007';
 
 const defaultRecords = [
   { birthdayMonth: defaultBirthdayMonth, birthdayFor: defaultBirthdayFor, name: 'Gaurav', status: 'Paid', contribution: 100, expense: 467, note: '', statusRemark: '' },
