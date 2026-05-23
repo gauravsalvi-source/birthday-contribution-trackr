@@ -1706,7 +1706,10 @@ function BirthdayBanner({ birthdayFor, month, eventType, birthdayEmployees }) {
   const monthValue = parseSheetKey(month).birthdayMonth;
   const isBabyGift = eventType === 'babyGift';
   const babyGiftName = birthdayFor.replace(/\s*baby\s*gift\s*$/i, '').trim();
-  const babyGiftRecipient = babyGiftName.replace(/[’']s$/i, '').trim() || names;
+  const babyGiftRecipient = babyGiftName
+    .replace(/^laits?\s+(?:gauhter|daughter|baby)$/i, 'Lalit')
+    .replace(/^lalit(?:[’']s)?(?:\s+(?:gauhter|daughter|baby))?$/i, 'Lalit')
+    .trim() || names;
 
   const formatList = (list) => {
     if (list.length === 0) return '';
