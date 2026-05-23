@@ -535,7 +535,7 @@ td {
 }
 
 .report-table {
-  min-width: 0;
+  min-width: 680px;
 }
 
 .birthday-banner-page {
