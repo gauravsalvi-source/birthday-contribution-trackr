@@ -182,6 +182,10 @@ export async function deleteMonth(month) {
   await query('DELETE FROM expenses WHERE birthdayMonth = $1', [birthdayMonth]);
 }
 
+export async function deleteRecord(id) {
+  await query('DELETE FROM records WHERE id = $1', [id]);
+}
+
 export async function addExpense(expense) {
   const { id = uuidv4(), birthdayMonth, birthdayFor, eventType = 'birthday', item, amount } = expense;
   await query(

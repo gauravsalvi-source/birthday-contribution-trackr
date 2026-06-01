@@ -12,6 +12,7 @@ import {
   bulkAddRecords,
   resetMonth,
   deleteMonth,
+  deleteRecord,
   addExpense,
   deleteExpense,
 } from './db.js';
@@ -70,6 +71,12 @@ app.post('/api/records/reset/:month', asyncHandler(async (req, res) => {
 app.delete('/api/records/month/:month', asyncHandler(async (req, res) => {
   const { month } = req.params;
   await deleteMonth(month);
+  res.json({ status: 'deleted' });
+}));
+
+app.delete('/api/records/:id', asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  await deleteRecord(id);
   res.json({ status: 'deleted' });
 }));
 

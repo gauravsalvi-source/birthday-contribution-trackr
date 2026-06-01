@@ -670,6 +670,33 @@ export default function App() {
     });
   }
 
+  async function deleteRecord(record) {
+    if (!confirm(`Delete entry for ${record.name}?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/records/${record.id}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) throw new Error('Failed to delete record on server');
+
+      const nextRecords = records.filter((item) => item.id !== record.id);
+      commitRecords(nextRecords);
+      if (form.id === record.id) {
+        resetForm();
+      }
+    } catch (err) {
+      console.error(err);
+      const nextRecords = records.filter((item) => item.id !== record.id);
+      commitRecords(nextRecords);
+      if (form.id === record.id) {
+        resetForm();
+      }
+      alert('Note: Deleted locally. Failed to sync with server.');
+    }
+  }
+
   async function handleExpenseSubmit(event) {
     event.preventDefault();
     const expense = normalizeExpense(expenseForm);
@@ -1452,6 +1479,7 @@ export default function App() {
                 records={visibleRecords}
                 totals={totals}
                 onEdit={editRecord}
+                onDelete={deleteRecord}
                 canEdit={isManagerMode}
               />
               {isManagerMode ? (
@@ -1589,7 +1617,7 @@ function OpeningBalanceEditor({ currentAdjustment, onSave }) {
   );
 }
 
-function RecordsTable({ records, totals, onEdit, canEdit }) {
+function RecordsTable({ records, totals, onEdit, onDelete, canEdit }) {
   return (
     <div className="table-scroll">
       <table className={canEdit ? 'records-table editable-table' : 'records-table viewer-table'}>
@@ -1614,6 +1642,7 @@ function RecordsTable({ records, totals, onEdit, canEdit }) {
                 key={record.id}
                 record={record}
                 onEdit={onEdit}
+                onDelete={onDelete}
                 canEdit={canEdit}
               />
             ))
@@ -1638,7 +1667,7 @@ function RecordsTable({ records, totals, onEdit, canEdit }) {
   );
 }
 
-function RecordRow({ record, onEdit, canEdit }) {
+function RecordRow({ record, onEdit, onDelete, canEdit }) {
   return (
     <tr>
       <td>{record.birthdayMonth}</td>
@@ -1653,6 +1682,9 @@ function RecordRow({ record, onEdit, canEdit }) {
           <div className="actions">
             <button type="button" className="action-button" onClick={() => onEdit(record)}>
               Edit
+            </button>
+            <button type="button" className="action-button danger" onClick={() => onDelete(record)}>
+              Delete
             </button>
           </div>
         </td>

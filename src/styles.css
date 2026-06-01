@@ -717,12 +717,12 @@ td {
 }
 
 .editable-table {
-  min-width: 820px;
+  min-width: 900px;
 }
 
 .editable-table th:nth-child(6),
 .editable-table td:nth-child(6) {
-  width: 130px;
+  width: 190px;
 }
 
 .report-panel {

@@ -53,6 +53,14 @@ export async function deleteMonth(month) {
   return res.json();
 }
 
+export async function deleteRecord(id) {
+  const res = await fetch(`${API_BASE}/api/records/${id}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw new Error('Failed to delete record');
+  return res.json();
+}
+
 export async function createExpense(expense) {
   const res = await fetch(`${API_BASE}/api/expenses`, {
     method: 'POST',
