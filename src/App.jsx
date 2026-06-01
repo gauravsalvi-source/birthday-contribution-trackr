@@ -1860,17 +1860,26 @@ function ReportPage({ title, records, emptyText, showBirthDate = false, canEdit 
   );
 }
 
+function getBabyGiftRecipientName(birthdayFor, fallbackName) {
+  const recipient = String(birthdayFor || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^baby\s*gift\s*(?:for|to)?\s*/i, '')
+    .replace(/^(?:gift|contribution)\s*(?:for|to)\s*/i, '')
+    .replace(/\s*(?:baby\s*gift|gift\s*contribution|contribution)\s*$/i, '')
+    .replace(/\s*(?:'s|`s|\u2019s)\s*(?:baby|child|daughter|son)?\s*$/i, '')
+    .replace(/\s*(?:'s|`s|\u2019s)\s*$/i, '')
+    .replace(/\s+(?:baby|child|daughter|son)\s*$/i, '')
+    .trim();
+
+  return recipient || fallbackName || 'you';
+}
+
 function BirthdayBanner({ birthdayFor, month, eventType, birthdayEmployees }) {
   let names = '';
   const eventMeta = getEventMeta(eventType);
   const monthValue = parseSheetKey(month).birthdayMonth;
   const isBabyGift = eventType === 'babyGift';
-  const babyGiftName = birthdayFor.replace(/\s*baby\s*gift\s*$/i, '').trim();
-  const babyGiftRecipient = babyGiftName
-    .replace(/^laits?\s+(?:gauhter|daughter|baby)$/i, 'Lalit')
-    .replace(/^lalit(?:[’']s)?(?:\s+(?:gauhter|daughter|baby))?$/i, 'Lalit')
-    .trim() || names;
-
   const formatList = (list) => {
     if (list.length === 0) return '';
     if (list.length === 1) return list[0];
@@ -1886,6 +1895,8 @@ function BirthdayBanner({ birthdayFor, month, eventType, birthdayEmployees }) {
     names = formatList(fallbackNames);
   }
 
+  const babyGiftRecipient = getBabyGiftRecipientName(birthdayFor, names);
+
   return (
     <section className="birthday-banner-page">
       <div className="birthday-banner">
@@ -1895,7 +1906,7 @@ function BirthdayBanner({ birthdayFor, month, eventType, birthdayEmployees }) {
             ? `${formatMonthLabel(monthValue)} - Team Contribution for ${birthdayFor}`
             : `Team ${eventMeta.name} Contribution`}
         </p>
-        <h2>{isBabyGift ? `Congratulations, ${babyGiftRecipient}!` : 'Happy Birthday'}</h2>
+        <h2>{isBabyGift ? `Congratulations, ${babyGiftRecipient}` : 'Happy Birthday'}</h2>
         {isBabyGift ? null : <strong>{names}</strong>}
         <p className="banner-message">
           {isBabyGift
