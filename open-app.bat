@@ -11,5 +11,7 @@ if not exist node_modules (
   exit /b
 )
 
+start "Birthday Backend" cmd /c "npm run dev:backend"
+timeout /t 2 /nobreak >nul
 start "" "http://127.0.0.1:5173"
 call npm run dev

@@ -52,7 +52,7 @@ const defaultRecords = [
   { birthdayMonth: defaultBirthdayMonth, birthdayFor: defaultBirthdayFor, name: 'Shivam', status: 'Paid', contribution: 100, expense: 0, note: '', statusRemark: '' },
 ];
 
-const teamMemberNames = Array.from(new Set(defaultRecords.map((record) => record.name)));
+const defaultTeamMemberNames = Array.from(new Set(defaultRecords.map((record) => record.name)));
 
 const blankForm = {
   id: '',
@@ -84,6 +84,7 @@ const blankMonthForm = {
   birthdayMonth: defaultBirthdayMonth,
   birthdayFor: '',
   eventType: defaultEventType,
+  additionalMembers: '',
 };
 
 const viewTabs = [
@@ -174,12 +175,15 @@ function cloneDefaultRecords() {
   return defaultRecords.map(normalizeRecord);
 }
 
-function buildMonthRecords(birthdayMonth, birthdayFor, eventType = defaultEventType) {
+function buildMonthRecords(birthdayMonth, birthdayFor, eventType = defaultEventType, memberNames = defaultTeamMemberNames) {
   const normalizedEventType = normalizeEventType(eventType);
   const isBirthday = normalizedEventType === 'birthday';
   const eventMeta = getEventMeta(normalizedEventType);
+  const uniqueNames = Array.from(new Set(
+    memberNames.map((name) => String(name || '').trim()).filter(Boolean),
+  ));
 
-  return teamMemberNames.map((name) => normalizeRecord({
+  return uniqueNames.map((name) => normalizeRecord({
     birthdayMonth,
     birthdayFor,
     eventType: normalizedEventType,
@@ -398,6 +402,7 @@ export default function App() {
   const [isManagerMode, setIsManagerMode] = useState(false);
   const [managerPasswordInput, setManagerPasswordInput] = useState('');
   const fileInputRef = useRef(null);
+  const nameInputRef = useRef(null);
 
   useEffect(() => {
     fetchData();
@@ -408,7 +413,7 @@ export default function App() {
       setLoading(true);
       const response = await fetch('/api/data');
       if (!response.ok) {
-        throw new Error('Failed to fetch data from the server');
+        throw new Error(`Server returned ${response.status}`);
       }
       const data = await response.json();
       const backendRecords = (data.records || []).map(normalizeRecord);
@@ -429,7 +434,12 @@ export default function App() {
       setError(null);
     } catch (err) {
       console.error('Error loading backend data:', err);
-      setError('Could not connect to the backend server. Using local storage instead.');
+      const isLocalDev = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
+      setError(
+        isLocalDev
+          ? 'Could not connect to the backend server. Start it with "npm run dev:backend" in a second terminal, then refresh. Using local storage for now.'
+          : 'Could not connect to the backend server. Check that DATABASE_URL is set on Vercel, then redeploy. Using local storage for now.',
+      );
       const localRecs = loadRecords();
       const localExps = loadExpenses();
       setRecords(localRecs);
@@ -445,6 +455,14 @@ export default function App() {
       setLoading(false);
     }
   }
+
+  const teamMemberNames = useMemo(() => {
+    const namesFromRecords = records
+      .map((record) => record.name)
+      .filter((name) => name && name !== 'Opening Balance');
+    return Array.from(new Set([...defaultTeamMemberNames, ...namesFromRecords]))
+      .sort((a, b) => a.localeCompare(b));
+  }, [records]);
 
   const monthTabs = useMemo(() => {
     const sheets = Array.from(new Set([
@@ -588,7 +606,24 @@ export default function App() {
       ...blankForm,
       birthdayMonth: activeSheet.birthdayMonth,
       eventType: activeSheet.eventType,
-      birthdayFor: monthRecord?.birthdayFor || defaultBirthdayFor,
+      birthdayFor: monthRecord?.birthdayFor || activeSheet.birthdayFor || defaultBirthdayFor,
+    });
+  }
+
+  function startAddMember() {
+    const monthRecord = monthlyRecords[0];
+    setForm({
+      ...blankForm,
+      birthdayMonth: activeSheet.birthdayMonth,
+      eventType: activeSheet.eventType,
+      birthdayFor: monthRecord?.birthdayFor || activeSheet.birthdayFor || defaultBirthdayFor,
+      status: 'Pending',
+      contribution: '100',
+    });
+    setActiveView('records');
+    requestAnimationFrame(() => {
+      nameInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      nameInputRef.current?.focus();
     });
   }
 
@@ -608,6 +643,18 @@ export default function App() {
     const record = normalizeRecord(form);
     if (!record.name) {
       alert('Please enter a name.');
+      return;
+    }
+
+    const targetSheetKey = makeSheetKey(record.birthdayMonth, record.eventType, record.birthdayFor);
+    const duplicateInSheet = records.some(
+      (item) => getSheetKey(item) === targetSheetKey
+        && item.name.toLowerCase() === record.name.toLowerCase()
+        && item.id !== record.id
+        && item.name !== 'Opening Balance',
+    );
+    if (duplicateInSheet) {
+      alert(`${record.name} is already in this month's sheet.`);
       return;
     }
 
@@ -940,7 +987,12 @@ export default function App() {
       return;
     }
 
-    const newMonthRecords = buildMonthRecords(birthdayMonth, birthdayFor, eventType);
+    const additionalNames = monthForm.additionalMembers
+      .split(/,|\n|&/)
+      .map((name) => name.trim())
+      .filter(Boolean);
+    const allMemberNames = Array.from(new Set([...teamMemberNames, ...additionalNames]));
+    const newMonthRecords = buildMonthRecords(birthdayMonth, birthdayFor, eventType, allMemberNames);
 
     try {
       const response = await fetch('/api/records/bulk', {
@@ -972,6 +1024,7 @@ export default function App() {
         birthdayMonth,
         eventType,
         birthdayFor: '',
+        additionalMembers: '',
       });
     } catch (err) {
       console.error(err);
@@ -997,6 +1050,7 @@ export default function App() {
         birthdayMonth,
         eventType,
         birthdayFor: '',
+        additionalMembers: '',
       });
       alert('Note: Created month sheet locally. Failed to sync with server.');
     }
@@ -1230,7 +1284,7 @@ export default function App() {
         <form className="month-create-panel" onSubmit={createMonth}>
           <div>
             <h2>Create Monthly Sheet</h2>
-            <p>All team members will be added automatically for the selected month.</p>
+            <p>All team members will be added automatically. You can include extra names below.</p>
           </div>
           <label>
             Occasion
@@ -1261,6 +1315,16 @@ export default function App() {
               value={monthForm.birthdayFor}
               onChange={(event) => updateMonthField('birthdayFor', event.target.value)}
               required
+            />
+          </label>
+          <label className="month-create-full-width">
+            Additional Members
+            <input
+              type="text"
+              placeholder="Optional: comma-separated names (e.g. Rahul, Priya)"
+              value={monthForm.additionalMembers}
+              onChange={(event) => updateMonthField('additionalMembers', event.target.value)}
+              list="team-member-suggestions"
             />
           </label>
           <button type="submit" className="primary-button">
@@ -1316,7 +1380,7 @@ export default function App() {
         {isManagerMode ? (
           <form className="form-panel" onSubmit={handleSubmit}>
             <div className="section-heading">
-              <h2>{form.id ? 'Edit Record' : 'Add Record'}</h2>
+              <h2>{form.id ? 'Edit Record' : 'Add Member'}</h2>
               {form.id ? (
                 <button type="button" className="ghost-button" onClick={resetForm}>
                   Cancel
@@ -1324,47 +1388,59 @@ export default function App() {
               ) : null}
             </div>
 
-            <label>
-              Month
-              <input
-                type="month"
-                value={form.birthdayMonth}
-                onChange={(event) => updateField('birthdayMonth', event.target.value)}
-                required
-              />
-            </label>
+            {form.id ? (
+              <>
+                <label>
+                  Month
+                  <input
+                    type="month"
+                    value={form.birthdayMonth}
+                    onChange={(event) => updateField('birthdayMonth', event.target.value)}
+                    required
+                  />
+                </label>
 
-            <label>
-              Occasion
-              <select
-                value={form.eventType}
-                onChange={(event) => updateField('eventType', event.target.value)}
-                required
-              >
-                {Object.entries(eventTypeLabels).map(([value, meta]) => (
-                  <option key={value} value={value}>{meta.name}</option>
-                ))}
-              </select>
-            </label>
+                <label>
+                  Occasion
+                  <select
+                    value={form.eventType}
+                    onChange={(event) => updateField('eventType', event.target.value)}
+                    required
+                  >
+                    {Object.entries(eventTypeLabels).map(([value, meta]) => (
+                      <option key={value} value={value}>{meta.name}</option>
+                    ))}
+                  </select>
+                </label>
 
-            <label>
-              {getEventMeta(form.eventType).sheetLabel}
-              <input
-                type="text"
-                placeholder={getEventMeta(form.eventType).recipientPlaceholder}
-                value={form.birthdayFor}
-                onChange={(event) => updateField('birthdayFor', event.target.value)}
-                required
-              />
-            </label>
+                <label>
+                  {getEventMeta(form.eventType).sheetLabel}
+                  <input
+                    type="text"
+                    placeholder={getEventMeta(form.eventType).recipientPlaceholder}
+                    value={form.birthdayFor}
+                    onChange={(event) => updateField('birthdayFor', event.target.value)}
+                    required
+                  />
+                </label>
+              </>
+            ) : (
+              <div className="sheet-context">
+                <p><strong>Month:</strong> {formatMonthLabel(form.birthdayMonth)}</p>
+                <p><strong>Occasion:</strong> {getEventMeta(form.eventType).name}</p>
+                <p><strong>{getEventMeta(form.eventType).sheetLabel}:</strong> {form.birthdayFor}</p>
+              </div>
+            )}
 
             <label>
               Team Member Name
               <input
+                ref={nameInputRef}
                 type="text"
                 placeholder="Contributor name"
                 value={form.name}
                 onChange={(event) => updateField('name', event.target.value)}
+                list="team-member-suggestions"
                 required
               />
             </label>
@@ -1416,10 +1492,16 @@ export default function App() {
             </label>
 
             <button type="submit" className="primary-button">
-              Save Record
+              {form.id ? 'Save Record' : 'Add Member'}
             </button>
           </form>
         ) : null}
+
+        <datalist id="team-member-suggestions">
+          {teamMemberNames.map((name) => (
+            <option key={name} value={name} />
+          ))}
+        </datalist>
 
         <section className="records-panel">
           <div className="table-toolbar">
@@ -1436,6 +1518,9 @@ export default function App() {
               />
               {isManagerMode ? (
                 <div className="reset-actions">
+                  <button type="button" className="primary-button" onClick={startAddMember}>
+                    + Add Member
+                  </button>
                   <button type="button" className="secondary-button" onClick={resetData}>
                     Reset to 0
                   </button>
