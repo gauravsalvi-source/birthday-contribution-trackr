@@ -26,7 +26,7 @@ const eventTypeLabels = {
   },
 };
 const contributionStatuses = ['Paid', 'Pending', 'Exempted', 'NA'];
-const managerPassword = 'Gaurav007';
+const managerPassword = 'Admin007';
 
 const defaultRecords = [
   { birthdayMonth: defaultBirthdayMonth, birthdayFor: defaultBirthdayFor, name: 'Gaurav', status: 'Paid', contribution: 100, expense: 467, note: '', statusRemark: '' },
@@ -46,6 +46,8 @@ const defaultRecords = [
   { birthdayMonth: defaultBirthdayMonth, birthdayFor: defaultBirthdayFor, name: 'Rupali', status: 'Paid', contribution: 100, expense: 0, note: '', statusRemark: '' },
   { birthdayMonth: defaultBirthdayMonth, birthdayFor: defaultBirthdayFor, name: 'Rushab', status: 'Paid', contribution: 100, expense: 0, note: '', statusRemark: '' },
   { birthdayMonth: defaultBirthdayMonth, birthdayFor: defaultBirthdayFor, name: 'Ankit', status: 'Paid', contribution: 100, expense: 0, note: '', statusRemark: '' },
+  { birthdayMonth: defaultBirthdayMonth, birthdayFor: defaultBirthdayFor, name: 'Ankit V', status: 'Paid', contribution: 100, expense: 0, note: '', statusRemark: '' },
+  { birthdayMonth: defaultBirthdayMonth, birthdayFor: defaultBirthdayFor, name: 'Laxmi', status: 'Paid', contribution: 100, expense: 0, note: '', statusRemark: '' },
   { birthdayMonth: defaultBirthdayMonth, birthdayFor: defaultBirthdayFor, name: 'Sayali', status: 'Paid', contribution: 100, expense: 0, note: '', statusRemark: '' },
   { birthdayMonth: defaultBirthdayMonth, birthdayFor: defaultBirthdayFor, name: 'Prathamesh', status: 'Paid', contribution: 100, expense: 0, note: '', statusRemark: '' },
   { birthdayMonth: defaultBirthdayMonth, birthdayFor: defaultBirthdayFor, name: 'Sweta', status: 'Paid', contribution: 100, expense: 0, note: '', statusRemark: '' },
@@ -177,31 +179,38 @@ function cloneDefaultRecords() {
 
 function buildMonthRecords(birthdayMonth, birthdayFor, eventType = defaultEventType, memberNames = defaultTeamMemberNames) {
   const normalizedEventType = normalizeEventType(eventType);
-  const isBirthday = normalizedEventType === 'birthday';
   const eventMeta = getEventMeta(normalizedEventType);
   const uniqueNames = Array.from(new Set(
     memberNames.map((name) => String(name || '').trim()).filter(Boolean),
   ));
 
-  return uniqueNames.map((name) => normalizeRecord({
-    birthdayMonth,
-    birthdayFor,
-    eventType: normalizedEventType,
-    name,
-    status: isBirthday && isBirthdayEmployee(name, birthdayFor) ? 'Exempted' : 'Pending',
-    contribution: isBirthday && isBirthdayEmployee(name, birthdayFor) ? 0 : 100,
-    note: isBirthday && isBirthdayEmployee(name, birthdayFor) ? eventMeta.exemptedNote : '',
-  }));
+  return uniqueNames.map((name) => {
+    const isExempted = isBirthdayEmployee(name, birthdayFor);
+    return normalizeRecord({
+      birthdayMonth,
+      birthdayFor,
+      eventType: normalizedEventType,
+      name,
+      status: isExempted ? 'Exempted' : 'Pending',
+      contribution: isExempted ? 0 : 100,
+      note: isExempted ? eventMeta.exemptedNote : '',
+    });
+  });
 }
 
 function isBirthdayEmployee(name, birthdayFor) {
   const normalizedName = name.trim().toLowerCase();
-  return birthdayFor
+  const rawList = birthdayFor
     .toLowerCase()
     .split(/,|&|and|\+/)
     .map((item) => item.trim())
-    .filter(Boolean)
-    .includes(normalizedName);
+    .filter(Boolean);
+
+  if (rawList.includes(normalizedName)) return true;
+
+  const cleaned = getBabyGiftRecipientName(birthdayFor, '').toLowerCase();
+  const cleanedList = cleaned.split(/,|&|and|\+/).map((item) => item.trim()).filter(Boolean);
+  return cleanedList.includes(normalizedName);
 }
 
 function cloneDefaultExpenses() {
@@ -1981,12 +1990,11 @@ function getBabyGiftRecipientName(birthdayFor, fallbackName) {
   const recipient = String(birthdayFor || '')
     .replace(/\s+/g, ' ')
     .trim()
-    .replace(/^baby\s*gift\s*(?:for|to)?\s*/i, '')
-    .replace(/^(?:gift|contribution)\s*(?:for|to)\s*/i, '')
-    .replace(/\s*(?:baby\s*gift|gift\s*contribution|contribution)\s*$/i, '')
-    .replace(/\s*(?:'s|`s|\u2019s)\s*(?:baby|child|daughter|son)?\s*$/i, '')
-    .replace(/\s*(?:'s|`s|\u2019s)\s*$/i, '')
-    .replace(/\s+(?:baby|child|daughter|son)\s*$/i, '')
+    .replace(/^(?:baby\s*gift|gift|baby\s*shower|contribution)\s*(?:for|to)?\s*/i, '')
+    .replace(/\s*(?:baby\s*gift|gift\s*contribution|gift|contribution)\s*$/i, '')
+    .replace(/\s*(?:'s|`s|’s|\u2019s)\s*(?:baby|babies|child|children|kid|kids|daughter|daughters|son|sons|twin|twins|boy|boys|girl|girls)?\s*$/i, '')
+    .replace(/\s*(?:'s|`s|’s|\u2019s)\s*$/i, '')
+    .replace(/\s+(?:baby|babies|child|children|kid|kids|daughter|daughters|son|sons|twin|twins|boy|boys|girl|girls)\s*$/i, '')
     .trim();
 
   return recipient || fallbackName || 'you';
@@ -2013,6 +2021,7 @@ function BirthdayBanner({ birthdayFor, month, eventType, birthdayEmployees }) {
   }
 
   const babyGiftRecipient = getBabyGiftRecipientName(birthdayFor, names);
+  const bannerRecipient = isBabyGift ? (babyGiftRecipient || names) : names;
 
   return (
     <section className="birthday-banner-page">
@@ -2020,11 +2029,11 @@ function BirthdayBanner({ birthdayFor, month, eventType, birthdayEmployees }) {
         <div className="banner-ribbon">{formatMonthLabel(monthValue)}</div>
         <p className="banner-kicker">
           {isBabyGift
-            ? `${formatMonthLabel(monthValue)} - Team Contribution for ${birthdayFor}`
+            ? `Team Contribution for ${birthdayFor}`
             : `Team ${eventMeta.name} Contribution`}
         </p>
-        <h2>{isBabyGift ? `Congratulations, ${babyGiftRecipient}` : 'Happy Birthday'}</h2>
-        {isBabyGift ? null : <strong>{names}</strong>}
+        <h2>{isBabyGift ? 'Congratulations' : 'Happy Birthday'}</h2>
+        <strong>{bannerRecipient}</strong>
         <p className="banner-message">
           {isBabyGift
             ? 'Wishing your family joy, good health, and beautiful new memories ahead.'
