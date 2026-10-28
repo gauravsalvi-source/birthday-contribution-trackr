@@ -11,6 +11,7 @@ import {
   deleteRecord,
   addExpense,
   deleteExpense,
+  bulkAddExpenses,
 } from './db.js';
 
 const app = express();
@@ -54,6 +55,15 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
+app.post('/api/auth/verify', (req, res) => {
+  const { password } = req.body || {};
+  const expected = process.env.MANAGER_PASSWORD || 'Admin007';
+  if (password && String(password) === expected) {
+    return res.json({ success: true });
+  }
+  return res.status(401).json({ success: false, error: 'Incorrect manager password' });
+});
+
 app.get('/api/data', asyncHandler(async (req, res) => {
   const records = await getAllRecords();
   const expenses = await getAllExpenses();
@@ -61,22 +71,36 @@ app.get('/api/data', asyncHandler(async (req, res) => {
 }));
 
 app.post('/api/records', asyncHandler(async (req, res) => {
+  if (!req.body || typeof req.body !== 'object' || !req.body.name) {
+    return res.status(400).json({ error: 'Record must have a name' });
+  }
   const saved = await addRecord(req.body);
   res.json(saved);
 }));
 
 app.post('/api/records/bulk', asyncHandler(async (req, res) => {
+  if (!Array.isArray(req.body)) {
+    return res.status(400).json({ error: 'Body must be an array of records' });
+  }
   const saved = await bulkAddRecords(req.body);
   res.json(saved);
 }));
 
-app.post('/api/records/reset/:month', asyncHandler(async (req, res) => {
-  await resetMonth(req.params.month);
+app.post('/api/records/reset/:month?', asyncHandler(async (req, res) => {
+  const month = req.body?.month || req.query?.month || req.params.month;
+  if (!month) {
+    return res.status(400).json({ error: 'Missing month parameter' });
+  }
+  await resetMonth(month);
   res.json({ status: 'reset' });
 }));
 
-app.delete('/api/records/month/:month', asyncHandler(async (req, res) => {
-  await deleteMonth(req.params.month);
+app.delete('/api/records/month/:month?', asyncHandler(async (req, res) => {
+  const month = req.body?.month || req.query?.month || req.params.month;
+  if (!month) {
+    return res.status(400).json({ error: 'Missing month parameter' });
+  }
+  await deleteMonth(month);
   res.json({ status: 'deleted' });
 }));
 
@@ -86,7 +110,18 @@ app.delete('/api/records/:id', asyncHandler(async (req, res) => {
 }));
 
 app.post('/api/expenses', asyncHandler(async (req, res) => {
+  if (!req.body || typeof req.body !== 'object' || !req.body.item) {
+    return res.status(400).json({ error: 'Expense must have an item name' });
+  }
   const saved = await addExpense(req.body);
+  res.json(saved);
+}));
+
+app.post('/api/expenses/bulk', asyncHandler(async (req, res) => {
+  if (!Array.isArray(req.body)) {
+    return res.status(400).json({ error: 'Body must be an array of expenses' });
+  }
+  const saved = await bulkAddExpenses(req.body);
   res.json(saved);
 }));
 

@@ -38,16 +38,20 @@ export async function bulkCreateRecords(records) {
 }
 
 export async function resetMonth(month) {
-  const res = await fetch(`${API_BASE}/api/records/reset/${month}`, {
+  const res = await fetch(`${API_BASE}/api/records/reset/${encodeURIComponent(month)}`, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ month }),
   });
   if (!res.ok) throw new Error('Failed to reset month');
   return res.json();
 }
 
 export async function deleteMonth(month) {
-  const res = await fetch(`${API_BASE}/api/records/month/${month}`, {
+  const res = await fetch(`${API_BASE}/api/records/month/${encodeURIComponent(month)}`, {
     method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ month }),
   });
   if (!res.ok) throw new Error('Failed to delete month');
   return res.json();
@@ -71,10 +75,33 @@ export async function createExpense(expense) {
   return res.json();
 }
 
+export async function bulkCreateExpenses(expenses) {
+  const res = await fetch(`${API_BASE}/api/expenses/bulk`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(expenses),
+  });
+  if (!res.ok) throw new Error('Failed to bulk create expenses');
+  return res.json();
+}
+
 export async function deleteExpense(id) {
   const res = await fetch(`${API_BASE}/api/expenses/${id}`, {
     method: 'DELETE',
   });
   if (!res.ok) throw new Error('Failed to delete expense');
+  return res.json();
+}
+
+export async function verifyManagerPassword(password) {
+  const res = await fetch(`${API_BASE}/api/auth/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Incorrect manager password');
+  }
   return res.json();
 }

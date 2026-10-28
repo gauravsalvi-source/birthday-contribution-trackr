@@ -116,38 +116,43 @@ export async function addRecord(record) {
 }
 
 export async function bulkAddRecords(records) {
+  if (!records || records.length === 0) return getAllRecords();
+  const CHUNK_SIZE = 500;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const queryText = `INSERT INTO records (id,birthdayMonth,birthdayFor,eventType,name,status,contribution,birthDate,statusRemark,note) VALUES ` +
-      records.map((_, i) => `($${i*10+1},$${i*10+2},$${i*10+3},$${i*10+4},$${i*10+5},$${i*10+6},$${i*10+7},$${i*10+8},$${i*10+9},$${i*10+10})`).join(',') +
-      ` ON CONFLICT (id) DO UPDATE SET
-        birthdayMonth = EXCLUDED.birthdayMonth,
-        birthdayFor = EXCLUDED.birthdayFor,
-        eventType = EXCLUDED.eventType,
-        name = EXCLUDED.name,
-        status = EXCLUDED.status,
-        contribution = EXCLUDED.contribution,
-        birthDate = EXCLUDED.birthDate,
-        statusRemark = EXCLUDED.statusRemark,
-        note = EXCLUDED.note`;
-    const values = [];
-    for (const r of records) {
-      const {
-        id = uuidv4(),
-        birthdayMonth,
-        birthdayFor,
-        eventType = 'birthday',
-        name,
-        status,
-        contribution,
-        birthDate = '',
-        statusRemark = '',
-        note = ''
-      } = r;
-      values.push(id, birthdayMonth, birthdayFor, eventType, name, status, contribution, birthDate, statusRemark, note);
+    for (let i = 0; i < records.length; i += CHUNK_SIZE) {
+      const chunk = records.slice(i, i + CHUNK_SIZE);
+      const queryText = `INSERT INTO records (id,birthdayMonth,birthdayFor,eventType,name,status,contribution,birthDate,statusRemark,note) VALUES ` +
+        chunk.map((_, idx) => `($${idx*10+1},$${idx*10+2},$${idx*10+3},$${idx*10+4},$${idx*10+5},$${idx*10+6},$${idx*10+7},$${idx*10+8},$${idx*10+9},$${idx*10+10})`).join(',') +
+        ` ON CONFLICT (id) DO UPDATE SET
+          birthdayMonth = EXCLUDED.birthdayMonth,
+          birthdayFor = EXCLUDED.birthdayFor,
+          eventType = EXCLUDED.eventType,
+          name = EXCLUDED.name,
+          status = EXCLUDED.status,
+          contribution = EXCLUDED.contribution,
+          birthDate = EXCLUDED.birthDate,
+          statusRemark = EXCLUDED.statusRemark,
+          note = EXCLUDED.note`;
+      const values = [];
+      for (const r of chunk) {
+        const {
+          id = uuidv4(),
+          birthdayMonth,
+          birthdayFor,
+          eventType = 'birthday',
+          name,
+          status,
+          contribution,
+          birthDate = '',
+          statusRemark = '',
+          note = ''
+        } = r;
+        values.push(id, birthdayMonth, birthdayFor, eventType, name, status, contribution, birthDate, statusRemark, note);
+      }
+      await client.query(queryText, values);
     }
-    await client.query(queryText, values);
     await client.query('COMMIT');
   } catch (e) {
     await client.query('ROLLBACK');
@@ -159,7 +164,11 @@ export async function bulkAddRecords(records) {
 }
 
 export async function resetMonth(month) {
-  const [birthdayMonth, eventType, birthdayFor] = month.includes('|') ? month.split('|') : [month, null, null];
+  if (!month) return;
+  const parts = String(month).includes('|') ? String(month).split('|') : [month];
+  const birthdayMonth = parts[0];
+  const eventType = parts[1] || null;
+  const birthdayFor = parts.slice(2).join('|') || null;
   if (eventType && birthdayFor) {
     await query(
       `UPDATE records SET status = 'Pending', contribution = 0, statusRemark = '', note = ''
@@ -172,7 +181,11 @@ export async function resetMonth(month) {
 }
 
 export async function deleteMonth(month) {
-  const [birthdayMonth, eventType, birthdayFor] = month.includes('|') ? month.split('|') : [month, null, null];
+  if (!month) return;
+  const parts = String(month).includes('|') ? String(month).split('|') : [month];
+  const birthdayMonth = parts[0];
+  const eventType = parts[1] || null;
+  const birthdayFor = parts.slice(2).join('|') || null;
   if (eventType && birthdayFor) {
     await query('DELETE FROM records WHERE birthdayMonth = $1 AND eventType = $2 AND birthdayFor = $3', [birthdayMonth, eventType, birthdayFor]);
     await query('DELETE FROM expenses WHERE birthdayMonth = $1 AND eventType = $2 AND birthdayFor = $3', [birthdayMonth, eventType, birthdayFor]);
@@ -204,4 +217,37 @@ export async function addExpense(expense) {
 
 export async function deleteExpense(id) {
   await query('DELETE FROM expenses WHERE id = $1', [id]);
+}
+
+export async function bulkAddExpenses(expenses) {
+  if (!expenses || expenses.length === 0) return [];
+  const CHUNK_SIZE = 500;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (let i = 0; i < expenses.length; i += CHUNK_SIZE) {
+      const chunk = expenses.slice(i, i + CHUNK_SIZE);
+      const queryText = `INSERT INTO expenses (id, birthdayMonth, birthdayFor, eventType, item, amount) VALUES ` +
+        chunk.map((_, idx) => `($${idx*6+1},$${idx*6+2},$${idx*6+3},$${idx*6+4},$${idx*6+5},$${idx*6+6})`).join(',') +
+        ` ON CONFLICT (id) DO UPDATE SET
+          birthdayMonth = EXCLUDED.birthdayMonth,
+          birthdayFor = EXCLUDED.birthdayFor,
+          eventType = EXCLUDED.eventType,
+          item = EXCLUDED.item,
+          amount = EXCLUDED.amount`;
+      const values = [];
+      for (const exp of chunk) {
+        const { id = uuidv4(), birthdayMonth, birthdayFor, eventType = 'birthday', item, amount } = exp;
+        values.push(id, birthdayMonth, birthdayFor, eventType, item, amount);
+      }
+      await client.query(queryText, values);
+    }
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+  return getAllExpenses();
 }
